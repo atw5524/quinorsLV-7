@@ -1,0 +1,563 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =================================
+   기본 스타일 리셋
+   ================================= */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* =================================
+   폰트 설정
+   ================================= */
+body {
+  font-family: 'Inter', 'Noto Sans KR', sans-serif !important;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-noto-sans-kr {
+  font-family: 'Noto Sans KR', sans-serif;
+}
+
+/* =================================
+   스크롤바 숨기기
+   ================================= */
+::-webkit-scrollbar {
+  display: none;
+}
+
+html, body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overflow-x: hidden;
+}
+
+/* 특정 요소에서 스크롤바 보이기 (필요시) */
+.show-scrollbar::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.show-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.show-scrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.show-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* =================================
+   Font Awesome 아이콘 보존
+   ================================= */
+.fa, .fas, .far, .fal, .fab {
+  font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+}
+
+/* Font Awesome 아이콘이 깨지지 않도록 */
+.fa::before,
+.fas::before,
+.far::before,
+.fal::before,
+.fab::before {
+  font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+}
+
+/* =================================
+   브랜드 색상 변수
+   ================================= */
+:root {
+  --brand-start: #ff925c;
+  --brand-end: #f77c40;
+  --brand-light: rgba(255, 146, 92, 0.1);
+  --brand-medium: rgba(255, 146, 92, 0.3);
+  --brand-dark: #e56b2f;
+  
+  /* 그레이 색상 */
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-400: #9ca3af;
+  --gray-500: #6b7280;
+  --gray-600: #4b5563;
+  --gray-700: #374151;
+  --gray-800: #1f2937;
+  --gray-900: #111827;
+  
+  /* 상태 색상 */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+}
+
+/* =================================
+   커스텀 유틸리티 클래스
+   ================================= */
+.text-brand-start {
+  color: var(--brand-start);
+}
+
+.text-brand-end {
+  color: var(--brand-end);
+}
+
+.bg-brand-start {
+  background-color: var(--brand-start);
+}
+
+.bg-brand-end {
+  background-color: var(--brand-end);
+}
+
+.border-brand-start {
+  border-color: var(--brand-start);
+}
+
+.border-brand-end {
+  border-color: var(--brand-end);
+}
+
+/* 호버 효과 */
+.hover\:text-brand-start:hover {
+  color: var(--brand-start);
+}
+
+.hover\:text-brand-end:hover {
+  color: var(--brand-end);
+}
+
+.hover\:bg-brand-start:hover {
+  background-color: var(--brand-start);
+}
+
+.hover\:bg-brand-end:hover {
+  background-color: var(--brand-end);
+}
+
+.hover\:border-brand-start:hover {
+  border-color: var(--brand-start);
+}
+
+.hover\:border-brand-end:hover {
+  border-color: var(--brand-end);
+}
+
+/* 포커스 효과 */
+.focus\:border-brand-start:focus {
+  border-color: var(--brand-start);
+}
+
+.focus\:border-brand-end:focus {
+  border-color: var(--brand-end);
+}
+
+.focus\:ring-brand-start:focus {
+  --tw-ring-color: var(--brand-light);
+}
+
+.focus\:ring-brand-end:focus {
+  --tw-ring-color: var(--brand-light);
+}
+
+.focus\:ring-orange-500:focus {
+  --tw-ring-color: rgba(249, 115, 22, 0.5);
+}
+
+.focus\:ring-orange-300:focus {
+  --tw-ring-color: rgba(253, 186, 116, 0.5);
+}
+
+/* =================================
+   애니메이션
+   ================================= */
+/* 스피너 애니메이션 */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* 페이드 인 애니메이션 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* 슬라이드 업 애니메이션 */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.4s ease-out;
+}
+
+/* 펄스 애니메이션 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* =================================
+   전환 효과
+   ================================= */
+.transition-all {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-colors {
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.transition-transform {
+  transition: transform 0.3s ease;
+}
+
+.transition-opacity {
+  transition: opacity 0.2s ease;
+}
+
+.transition-shadow {
+  transition: box-shadow 0.3s ease;
+}
+
+/* =================================
+   커스텀 컴포넌트 스타일
+   ================================= */
+/* 체크박스 커스터마이징 */
+input[type="checkbox"]:checked {
+  background-color: var(--brand-end);
+  border-color: var(--brand-end);
+}
+
+input[type="checkbox"]:focus {
+  ring-color: var(--brand-light);
+}
+
+/* 라디오 버튼 커스터마이징 */
+input[type="radio"]:checked {
+  background-color: var(--brand-end);
+  border-color: var(--brand-end);
+}
+
+/* 인풋 필드 스타일 */
+.input-field {
+  @apply w-full px-4 py-3 border border-gray-200 rounded-xl;
+  @apply focus:ring-2 focus:ring-orange-500 focus:border-transparent;
+  @apply outline-none transition-all placeholder-gray-400;
+}
+
+.input-field:focus {
+  border-color: var(--brand-end);
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
+
+/* 버튼 스타일 */
+.btn-primary {
+  @apply bg-gradient-to-br from-orange-400 to-orange-500;
+  @apply text-white font-bold py-4 px-6 rounded-xl;
+  @apply shadow-lg hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-orange-300;
+  @apply transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply bg-white border border-gray-200 text-gray-700;
+  @apply py-4 px-6 rounded-xl hover:bg-gray-50;
+  @apply transition-all duration-300;
+}
+
+.btn-loading {
+  pointer-events: none;
+}
+
+/* 카드 스타일 */
+.card {
+  @apply bg-white p-5 rounded-2xl border border-gray-200 shadow-sm;
+  @apply hover:border-orange-500 hover:shadow-lg transition-all duration-300 cursor-pointer;
+}
+
+.card.selected {
+  @apply border-orange-500 shadow-lg;
+}
+
+/* =================================
+   모바일 최적화
+   ================================= */
+/* 모바일 터치 최적화 */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* 모바일 스크롤 최적화 */
+.mobile-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* iOS 스타일 제거 */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+button {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* =================================
+   유틸리티 클래스
+   ================================= */
+/* 텍스트 자르기 */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-clamp-2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.line-clamp-3 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* 중앙 정렬 */
+.center-flex {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 그림자 효과 */
+.shadow-brand {
+  box-shadow: 0 10px 25px rgba(255, 146, 92, 0.2);
+}
+
+.shadow-brand-lg {
+  box-shadow: 0 20px 40px rgba(255, 146, 92, 0.3);
+}
+
+/* 백드롭 블러 */
+.backdrop-blur-custom {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* =================================
+   반응형 디자인
+   ================================= */
+/* 모바일 우선 */
+@media (max-width: 640px) {
+  .mobile-full {
+    width: 100%;
+    max-width: none;
+  }
+  
+  .mobile-padding {
+    padding: 1rem;
+  }
+  
+  .mobile-text-sm {
+    font-size: 0.875rem;
+  }
+}
+
+/* 태블릿 */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .tablet-padding {
+    padding: 1.5rem;
+  }
+}
+
+/* 데스크톱 */
+@media (min-width: 1025px) {
+  .desktop-padding {
+    padding: 2rem;
+  }
+}
+
+/* =================================
+   접근성
+   ================================= */
+/* 포커스 표시 */
+.focus-visible:focus {
+  outline: 2px solid var(--brand-end);
+  outline-offset: 2px;
+}
+
+/* 스크린 리더 전용 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* =================================
+   인쇄 스타일
+   ================================= */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+}
+
+/* =================================
+   다크 모드 (선택사항)
+   ================================= */
+@media (prefers-color-scheme: dark) {
+  .dark-mode {
+    --bg-primary: #1f2937;
+    --bg-secondary: #374151;
+    --text-primary: #f9fafb;
+    --text-secondary: #d1d5db;
+  }
+}
+
+/* =================================
+   성능 최적화
+   ================================= */
+/* GPU 가속 */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* 레이아웃 최적화 */
+.contain-layout {
+  contain: layout;
+}
+
+.contain-paint {
+  contain: paint;
+}
+
+/* 세로 텍스트 */
+.writing-mode-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+/* 슬라이드 애니메이션 */
+.translate-x-0 {
+  transform: translateX(0);
+}
+
+.-translate-x-full {
+  transform: translateX(-100%);
+}
+
+/* 부드러운 전환 */
+.transition-transform {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-opacity {
+  transition: opacity 0.3s ease;
+}
+
+/* 그림자 효과 강화 */
+.shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+/* 백드롭 블러 */
+.backdrop-blur-sm {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* 모바일 대응 */
+@media (max-width: 480px) {
+  .w-80 {
+    width: 85vw;
+  }
+}
+
+/* 펄스 애니메이션 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
