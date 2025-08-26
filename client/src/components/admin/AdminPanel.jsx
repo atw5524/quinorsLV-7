@@ -28,7 +28,7 @@ const AdminPanel = () => {
   const fetchStats = async () => {
     try {
       console.log('📊 통계 API 호출 시작...');
-      const response = await fetch('http://localhost:5480/api/admin/stats');
+      const response = await fetch(' https://quinors-lv-backend.ngrok.io/api/admin/stats');
       const result = await response.json();
       
       console.log('📊 통계 API 응답:', result);
@@ -54,7 +54,7 @@ const AdminPanel = () => {
       console.log('📋 신청 목록 API 호출 시작... status:', status);
       setLoading(true);
       
-      const response = await fetch(`http://localhost:5480/api/admin/requests?status=${status}`);
+      const response = await fetch(` https://quinors-lv-backend.ngrok.io/api/admin/requests?status=${status}`);
       const result = await response.json();
       
       console.log('📋 신청 목록 API 응답:', result);
@@ -151,7 +151,7 @@ const AdminPanel = () => {
       
       setProcessingIds(prev => new Set([...prev, requestId]));
       
-      const response = await fetch(`http://localhost:5480/api/admin/approve/${requestId}`, {
+      const response = await fetch(` https://quinors-lv-backend.ngrok.io/api/admin/approve/${requestId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -218,7 +218,7 @@ const AdminPanel = () => {
 
       setProcessingIds(prev => new Set([...prev, requestId]));
 
-      const response = await fetch(`http://localhost:5480/api/admin/reject/${requestId}`, {
+      const response = await fetch(` https://quinors-lv-backend.ngrok.io/api/admin/reject/${requestId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

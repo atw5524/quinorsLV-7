@@ -31,7 +31,7 @@ const DeliveryInfoForm = () => {
 
   const itemOptions = [
     { id: 'bag', label: '쇼핑백', icon: 'fa-shopping-bag' },
-    { id: 'handbag', label: '핸드백', icon: 'fa-briefcase' },
+    { id: 'clothes', label: '옷,유니폼', icon: 'fa-shirt' }, // 👈 핸드백 → 옷,유니폼으로 변경
     { id: 'etc', label: '기타', icon: 'fa-box' }
   ];
 
@@ -165,7 +165,7 @@ const DeliveryInfoForm = () => {
                         value={customItem}
                         onChange={(e) => setCustomItem(e.target.value)}
                         className="w-full p-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-orange-500"
-                        placeholder="기타 물품 정보를 입력하세요"
+                        placeholder="책 한권"
                       />
                     </div>
                   )}

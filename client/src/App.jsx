@@ -9,25 +9,9 @@ import './styles/globals.css';
 
 // 메인 앱 컨텐츠 컴포넌트
 const AppContent = () => {
-  const { isAuthenticated, login, logout, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const location = useLocation();
   const [currentView, setCurrentView] = useState('login'); // 'login', 'delivery', 'admin'
-
-  const handleLogin = async (credentials) => {
-    try {
-      await login(credentials);
-      console.log('로그인 성공!');
-      setCurrentView('delivery');
-    } catch (error) {
-      console.error('Login failed:', error);
-      throw error; // Login 컴포넌트에서 에러 처리할 수 있도록
-    }
-  };
-
-  const handleLogout = () => {
-    logout();
-    setCurrentView('login');
-  };
 
   const handleNavigateToRegister = () => {
     console.log('Navigate to register');
@@ -52,18 +36,24 @@ const AppContent = () => {
     if (location.pathname === '/admin') {
       setCurrentView('admin');
     } else if (location.pathname === '/' && isAuthenticated) {
-      setCurrentView('delivery');
+      setCurrentView('delivery'); // 로그인 후 바로 배송 페이지로 이동
     } else if (!isAuthenticated) {
       setCurrentView('login');
     }
   }, [location.pathname, isAuthenticated]);
 
+  // 로그인 상태 변경 시 자동 리다이렉션
+  React.useEffect(() => {
+    if (isAuthenticated && currentView === 'login') {
+      setCurrentView('delivery'); // 로그인 성공 시 배송 페이지로 이동
+    }
+  }, [isAuthenticated, currentView]);
+
   // 현재 뷰에 따른 렌더링
   const renderCurrentView = () => {
     if (!isAuthenticated && currentView !== 'admin') {
       return (
-        <Login 
-          onLogin={handleLogin}
+        <Login
           onNavigateToRegister={handleNavigateToRegister}
           onNavigateToIdRequest={handleNavigateToIdRequest}
         />
@@ -86,40 +76,10 @@ const AppContent = () => {
             )}
           </div>
         );
-      
+
       case 'delivery':
-        return (
-          <div>
-            <DeliveryFlow />
-            
-            {/* 관리자 페이지 접근 버튼 */}
-            <div className="fixed bottom-4 right-4 flex flex-col gap-2">
-              <button
-                onClick={handleNavigateToAdmin}
-                className="bg-red-500 text-white px-3 py-2 rounded-full text-sm hover:bg-red-600 transition-colors shadow-lg"
-                title="관리자 페이지"
-              >
-                👨‍💼 Admin
-              </button>
-              <button
-                onClick={handleLogout}
-                className="bg-gray-500 text-white px-3 py-2 rounded-full text-sm hover:bg-gray-600 transition-colors shadow-lg"
-                title="로그아웃"
-              >
-                🚪 Logout
-              </button>
-            </div>
-          </div>
-        );
-      
       default:
-        return (
-          <Login 
-            onLogin={handleLogin}
-            onNavigateToRegister={handleNavigateToRegister}
-            onNavigateToIdRequest={handleNavigateToIdRequest}
-          />
-        );
+        return <DeliveryFlow />;
     }
   };
 
@@ -136,13 +96,10 @@ const RouterApp = () => {
             <Routes>
               {/* 기본 페이지 */}
               <Route path="/" element={<AppContent />} />
-              
               {/* 관리자 페이지 */}
               <Route path="/admin" element={<AppContent />} />
-              
               {/* 기타 라우트들 */}
               <Route path="/delivery" element={<AppContent />} />
-              
               {/* 404 페이지 */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

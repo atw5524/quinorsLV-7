@@ -16,20 +16,58 @@ const deliveryReducer = (state, action) => {
   switch (action.type) {
     case 'SET_DELIVERY_TYPE':
       return { ...state, deliveryType: action.payload, currentStep: 2 };
+
     case 'SET_ORIGIN_STORE':
-      return { ...state, originStore: action.payload, currentStep: 3 };
+      // 🎯 매장 정보와 선택된 부서 정보 모두 처리
+      if (typeof action.payload === 'object' && action.payload.store) {
+        // payload가 { store, selectedDepartment, selectedDepartmentIndex } 형태인 경우
+        return { 
+          ...state, 
+          originStore: {
+            ...action.payload.store,
+            selectedDepartment: action.payload.selectedDepartment,
+            selectedDepartmentIndex: action.payload.selectedDepartmentIndex
+          }, 
+          currentStep: 3 
+        };
+      } else {
+        // payload가 단순히 store 객체인 경우 (기존 호환성)
+        return { ...state, originStore: action.payload, currentStep: 3 };
+      }
+
     case 'SET_DESTINATION_STORE':
-      return { ...state, destinationStore: action.payload, currentStep: 4 };
+      // 🎯 매장 정보와 선택된 부서 정보 모두 처리
+      if (typeof action.payload === 'object' && action.payload.store) {
+        // payload가 { store, selectedDepartment, selectedDepartmentIndex } 형태인 경우
+        return { 
+          ...state, 
+          destinationStore: {
+            ...action.payload.store,
+            selectedDepartment: action.payload.selectedDepartment,
+            selectedDepartmentIndex: action.payload.selectedDepartmentIndex
+          }, 
+          currentStep: 4 
+        };
+      } else {
+        // payload가 단순히 store 객체인 경우 (기존 호환성)
+        return { ...state, destinationStore: action.payload, currentStep: 4 };
+      }
+
     case 'SET_DELIVERY_INFO':
       return { ...state, deliveryInfo: action.payload };
+
     case 'SET_STEP':
       return { ...state, currentStep: action.payload };
+
     case 'LOGIN_SUCCESS':
       return { ...state, isAuthenticated: true, user: action.payload };
+
     case 'LOGOUT':
       return { ...state, isAuthenticated: false, user: null };
+
     case 'RESET':
       return initialState;
+
     default:
       return state;
   }
@@ -73,11 +111,36 @@ export const DeliveryProvider = ({ children }) => {
     dispatch({ type: 'LOGOUT' });
   };
 
+  // 🎯 헬퍼 함수들 추가
+  const setOriginStore = (store, selectedDepartment = null, selectedDepartmentIndex = null) => {
+    dispatch({
+      type: 'SET_ORIGIN_STORE',
+      payload: {
+        store,
+        selectedDepartment,
+        selectedDepartmentIndex
+      }
+    });
+  };
+
+  const setDestinationStore = (store, selectedDepartment = null, selectedDepartmentIndex = null) => {
+    dispatch({
+      type: 'SET_DESTINATION_STORE',
+      payload: {
+        store,
+        selectedDepartment,
+        selectedDepartmentIndex
+      }
+    });
+  };
+
   const contextValue = useMemo(() => ({
     ...state,
     dispatch,
     login,
-    logout
+    logout,
+    setOriginStore,     // 👈 헬퍼 함수 추가
+    setDestinationStore // 👈 헬퍼 함수 추가
   }), [state]);
 
   return (

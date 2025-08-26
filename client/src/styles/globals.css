@@ -561,3 +561,34 @@ button {
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Font Awesome 아이콘 지원 (필요시) */
+.fa, .fas, .far, .fal, .fab {
+  font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+}
+
+/* 그라데이션 색상 정의 */
+.from-brand-start {
+  --tw-gradient-from: #ff925c;
+}
+
+.to-brand-end {
+  --tw-gradient-to: #f77c40;
+}
+
+.via-brand-end {
+  --tw-gradient-via: #f77c40;
+}
+
+/* 애니메이션 효과 */
+.transition-opacity {
+  transition: opacity 0.3s ease;
+}
+
+/* 모바일 최적화 */
+@media (max-width: 640px) {
+  .fixed.top-0.w-full.max-w-sm {
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}

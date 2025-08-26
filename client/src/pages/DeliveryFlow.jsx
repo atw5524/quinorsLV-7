@@ -10,7 +10,8 @@ const DeliveryFlow = () => {
   
   if (!context) {
     return (
-      <div className="bg-gray-100 min-h-screen flex items-center justify-center">
+      <div className="w-full max-w-sm mx-auto bg-white shadow-lg rounded-3xl overflow-hidden min-h-screen flex flex-col">
+      <div className="h-4"></div>
         <div className="text-center">
           <h2 className="text-xl font-bold text-gray-800 mb-2">로딩 중...</h2>
           <p className="text-gray-600">잠시만 기다려주세요.</p>
