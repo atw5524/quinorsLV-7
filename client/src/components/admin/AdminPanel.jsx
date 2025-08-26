@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AccountManage from './AccountManage';
+import StoreManage from './StoreManage';
+import UserManage from './UserManage';
 
 const AdminPanel = () => {
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'requests', 'account-manage'
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'account-requests', 'store-manage', 'user-manage'
   const [stats, setStats] = useState({
     requests: { total: 0, pending: 0, approved: 0, rejected: 0 },
+    stores: { totalStores: 0, totalDepartments: 0, totalManagers: 0 },
     users: { total: 0, active: 0, inactive: 0 }
   });
   const [requests, setRequests] = useState([]);
@@ -12,10 +15,16 @@ const AdminPanel = () => {
   const [processingIds, setProcessingIds] = useState(new Set());
   const [recentActivities, setRecentActivities] = useState([]);
   const [error, setError] = useState(null);
-  
+
   // 컴포넌트 마운트 상태 추적
   const isMountedRef = useRef(true);
   const intervalRef = useRef(null);
+
+  // 탭 네비게이션 콜백 함수
+  const handleNavigateToTab = (tabName) => {
+    console.log(`🔄 탭 변경 요청: ${activeTab} -> ${tabName}`);
+    setActiveTab(tabName);
+  };
 
   // 안전한 상태 업데이트 함수
   const safeSetState = (setter) => {
@@ -24,15 +33,14 @@ const AdminPanel = () => {
     }
   };
 
-  // API 호출 함수들 (기존과 동일)
+  // API 호출 함수들
   const fetchStats = async () => {
     try {
       console.log('📊 통계 API 호출 시작...');
-      const response = await fetch(' https://quinors-lv-backend.ngrok.io/api/admin/stats');
+      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/stats');
       const result = await response.json();
-      
       console.log('📊 통계 API 응답:', result);
-      
+
       if (response.ok && result.success) {
         console.log('📊 ✅ 통계 데이터 처리 성공:', result.data);
         if (isMountedRef.current) {
@@ -53,12 +61,10 @@ const AdminPanel = () => {
     try {
       console.log('📋 신청 목록 API 호출 시작... status:', status);
       setLoading(true);
-      
-      const response = await fetch(` https://quinors-lv-backend.ngrok.io/api/admin/requests?status=${status}`);
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests?status=${status}`);
       const result = await response.json();
-      
       console.log('📋 신청 목록 API 응답:', result);
-      
+
       if (response.ok && result.success) {
         console.log('📋 ✅ 신청 목록 데이터 처리 성공:', result.data);
         if (isMountedRef.current) {
@@ -92,29 +98,29 @@ const AdminPanel = () => {
       console.log('🔄 최근 활동 업데이트 중단 - 마운트 상태 또는 데이터 문제');
       return;
     }
-    
+
     console.log('🔄 최근 활동 업데이트 시작, 전체 데이터:', requestsData.length);
-    
+
     const processedRequests = requestsData.filter(req => {
-      const hasProcessedDate = req.processedDate;
+      const hasProcessedDate = req.processedAt;
       const isProcessed = req.status === 'approved' || req.status === 'rejected';
       return hasProcessedDate && isProcessed;
     });
-    
+
     console.log('🔄 처리된 요청 수:', processedRequests.length);
-    
+
     const activities = processedRequests
-      .sort((a, b) => new Date(b.processedDate) - new Date(a.processedDate))
+      .sort((a, b) => new Date(b.processedAt) - new Date(a.processedAt))
       .slice(0, 3)
       .map(req => ({
         id: req._id,
-        name: req.managerName,
-        store: req.storeCode,
+        name: req.charge_name,
+        store: req.dept_name,
         status: req.status,
-        time: getTimeAgo(req.processedDate),
+        time: getTimeAgo(req.processedAt),
         notes: req.notes
       }));
-    
+
     console.log('🔄 최종 최근 활동:', activities);
     setRecentActivities(activities);
   };
@@ -140,19 +146,19 @@ const AdminPanel = () => {
 
   const handleApprove = async (requestId, buttonElement) => {
     if (!isMountedRef.current) return;
-    
+
     try {
       console.log('✅ 승인 처리 시작:', requestId);
-      
+
       if (buttonElement) {
         buttonElement.innerHTML = '처리중...';
         buttonElement.disabled = true;
       }
-      
+
       setProcessingIds(prev => new Set([...prev, requestId]));
-      
-      const response = await fetch(` https://quinors-lv-backend.ngrok.io/api/admin/approve/${requestId}`, {
-        method: 'POST',
+
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/approve`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -163,7 +169,7 @@ const AdminPanel = () => {
 
       const result = await response.json();
       console.log('✅ 승인 API 응답:', result);
-      
+
       if (response.ok && result.success) {
         setTimeout(() => {
           if (buttonElement) {
@@ -175,8 +181,13 @@ const AdminPanel = () => {
             buttonElement.className = 'px-3 py-1 bg-green-600 text-white text-xs rounded-md';
           }
         }, 1500);
-        
-        alert(`계정 승인 완료!\n사용자 ID: ${result.data.userId}\n임시 비밀번호: ${result.data.tempPassword}`);
+
+        let alertMessage = '✅ 계정 승인 완료!';
+        if (result.data && result.data.userId && result.data.tempPassword) {
+          alertMessage += `\n\n📋 생성된 계정 정보:\n• 사용자 ID: ${result.data.userId}\n• 임시 비밀번호: ${result.data.tempPassword}`;
+        }
+        alert(alertMessage);
+
         await Promise.all([fetchRequests(), fetchStats()]);
       } else {
         console.error('✅ 승인 실패:', result);
@@ -204,7 +215,7 @@ const AdminPanel = () => {
 
   const handleReject = async (requestId, buttonElement) => {
     if (!isMountedRef.current) return;
-    
+
     try {
       const notes = prompt('거부 사유를 입력해주세요:', '서류 미비');
       if (!notes) return;
@@ -218,8 +229,8 @@ const AdminPanel = () => {
 
       setProcessingIds(prev => new Set([...prev, requestId]));
 
-      const response = await fetch(` https://quinors-lv-backend.ngrok.io/api/admin/reject/${requestId}`, {
-        method: 'POST',
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/reject`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -271,7 +282,6 @@ const AdminPanel = () => {
   useEffect(() => {
     console.log('🚀 관리자 패널 마운트 - 데이터 로드 시작');
     isMountedRef.current = true;
-    
     fetchStats();
     fetchRequests();
 
@@ -320,11 +330,35 @@ const AdminPanel = () => {
     error
   });
 
-  // AccountManage 탭인 경우 AccountManage 컴포넌트 렌더링
-  if (activeTab === 'account-manage') {
-    return <AccountManage onBackToAdmin={() => setActiveTab('dashboard')} />;
+  // 각 탭별 컴포넌트 렌더링
+  if (activeTab === 'account-requests') {
+    return (
+      <AccountManage 
+        onBackToAdmin={() => setActiveTab('dashboard')} 
+        onNavigateToTab={handleNavigateToTab}
+      />
+    );
   }
 
+  if (activeTab === 'store-manage') {
+    return (
+      <StoreManage 
+        onBackToAdmin={() => setActiveTab('dashboard')} 
+        onNavigateToTab={handleNavigateToTab}
+      />
+    );
+  }
+
+  if (activeTab === 'user-manage') {
+    return (
+      <UserManage 
+        onBackToAdmin={() => setActiveTab('dashboard')} 
+        onNavigateToTab={handleNavigateToTab}
+      />
+    );
+  }
+
+  // 대시보드 렌더링
   return (
     <div className="bg-gray-100 font-sans">
       <div id="mobile-container" className="w-full max-w-sm mx-auto bg-white shadow-lg min-h-screen">
@@ -341,12 +375,14 @@ const AdminPanel = () => {
         <div className="bg-blue-100 p-2 text-xs text-blue-800 m-4 rounded">
           <div>📊 Stats: 총 {stats.requests.total}, 대기 {stats.requests.pending}, 승인 {stats.requests.approved}</div>
           <div>📋 Requests: {requests.length}개, Pending: {pendingRequests.length}개</div>
+          <div>🏪 Stores: {stats.stores.totalStores}개 매장, {stats.stores.totalDepartments}개 부서</div>
+          <div>👥 Users: {stats.users.total}명, 활성 {stats.users.active}명</div>
           <div>🔄 Recent: {recentActivities.length}개</div>
           <div>📅 Today: {todayRequests}, Week: {thisWeekRequests}</div>
           <div>🎯 Active Tab: {activeTab}</div>
           {loading && <div>⏳ 로딩 중...</div>}
         </div>
-        
+
         {/* Header */}
         <header id="header" className="bg-gradient-to-br from-orange-400 via-orange-500 to-orange-500 text-white p-4 pt-12">
           <div className="flex items-center justify-between mb-6">
@@ -358,7 +394,7 @@ const AdminPanel = () => {
               </div>
               <div>
                 <h1 className="text-lg font-bold">관리자 대시보드</h1>
-                <p className="text-white/80 text-xs">계정 신청 관리</p>
+                <p className="text-white/80 text-xs">통합 관리 시스템</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -367,18 +403,18 @@ const AdminPanel = () => {
                   <path d="M224 0c-17.7 0-32 14.3-32 32V51.2C119 66 64 130.6 64 208v18.8c0 47-17.3 92.4-48.5 127.6l-7.4 8.3c-8.4 9.4-10.4 22.9-5.3 34.4S19.4 416 32 416H416c12.6 0 24-7.4 29.2-18.9s3.1-25-5.3-34.4l-7.4-8.3C401.3 319.2 384 273.9 384 226.8V208c0-77.4-55-142-128-156.8V32c0-17.7-14.3-32-32-32zm45.3 493.3c12-12 18.7-28.3 18.7-45.3H224 160c0 17 6.7 33.3 18.7 45.3s28.3 18.7 45.3 18.7s33.3-6.7 45.3-18.7z"/>
                 </svg>
               </button>
-              <img 
-                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg" 
+              <img
+                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg"
                 className="w-8 h-8 rounded-lg"
                 alt="Admin Avatar"
               />
             </div>
           </div>
-          
+
           {/* Admin Stats */}
           <div id="admin-stats" className="grid grid-cols-2 gap-3">
             <div className="bg-white/10 rounded-xl p-4">
-              <div className="text-white/80 text-xs mb-1">신청 계정</div>
+              <div className="text-white/80 text-xs mb-1">가입 신청</div>
               <div className="text-xl font-bold text-white">{stats.requests.total}</div>
               <div className="text-green-300 text-xs">+{thisWeekRequests} 이번주</div>
             </div>
@@ -393,37 +429,37 @@ const AdminPanel = () => {
         {/* Main Content */}
         <main id="main-content" className="p-4 pb-20">
           <div id="dashboard-overview" className="mb-6">
-            <h2 className="text-lg font-bold text-gray-800 mb-4">계정 신청 관리</h2>
-            
-            {/* Application Stats */}
-            <div id="application-stats" className="grid grid-cols-2 gap-4 mb-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">시스템 현황</h2>
+
+            {/* System Stats */}
+            <div id="system-stats" className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-white rounded-xl p-4 shadow-sm border">
-                <div className="text-gray-500 text-sm mb-1">신규 신청</div>
-                <div className="text-2xl font-bold text-gray-800">{stats.requests.pending}</div>
-                <div className="text-orange-500 text-sm">+{todayRequests} 오늘</div>
+                <div className="text-gray-500 text-sm mb-1">매장 현황</div>
+                <div className="text-2xl font-bold text-gray-800">{stats.stores.totalStores}</div>
+                <div className="text-blue-500 text-sm">{stats.stores.totalDepartments}개 부서</div>
               </div>
               <div className="bg-white rounded-xl p-4 shadow-sm border">
-                <div className="text-gray-500 text-sm mb-1">승인 완료</div>
-                <div className="text-2xl font-bold text-gray-800">{stats.requests.approved}</div>
-                <div className="text-green-500 text-sm">전체</div>
+                <div className="text-gray-500 text-sm mb-1">활성 회원</div>
+                <div className="text-2xl font-bold text-gray-800">{stats.users.active}</div>
+                <div className="text-green-500 text-sm">총 {stats.users.total}명</div>
               </div>
             </div>
 
             {/* Pending Applications */}
             <div id="pending-applications" className="bg-white rounded-xl p-4 shadow-sm border mb-6">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-800">승인 대기 계정</h3>
-                <button 
+                <h3 className="font-semibold text-gray-800">승인 대기 신청</h3>
+                <button
                   className="text-orange-500 text-sm"
                   onClick={() => {
-                    console.log('🔄 전체보기 클릭 - 데이터 새로고침');
-                    fetchRequests();
+                    console.log('🔄 전체보기 클릭 - 가입신청 관리로 이동');
+                    setActiveTab('account-requests');
                   }}
                 >
                   전체보기
                 </button>
               </div>
-              
+
               <div className="space-y-3">
                 {loading ? (
                   <div className="text-center py-4 text-gray-500 text-sm">
@@ -438,20 +474,20 @@ const AdminPanel = () => {
                         </svg>
                       </div>
                       <div>
-                        <div className="font-medium text-gray-800">{request.managerName}</div>
+                        <div className="font-medium text-gray-800">{request.charge_name}</div>
                         <div className="text-xs text-gray-500">
-                          {request.storeCode} · 연락처: ****{request.phoneLast4}
+                          {request.dept_name} · {request.cust_name}
                         </div>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button 
+                      <button
                         className="px-3 py-1 bg-green-500 text-white text-xs rounded-md hover:bg-green-600 transition-colors"
                         onClick={(e) => handleApprove(request._id, e.target)}
                       >
                         승인
                       </button>
-                      <button 
+                      <button
                         className="px-3 py-1 bg-gray-300 text-gray-600 text-xs rounded-md hover:bg-gray-400 transition-colors"
                         onClick={(e) => handleReject(request._id, e.target)}
                       >
@@ -461,15 +497,15 @@ const AdminPanel = () => {
                   </div>
                 )) : (
                   <div className="text-center py-4 text-gray-500 text-sm">
-                    승인 대기 중인 계정이 없습니다.
+                    승인 대기 중인 신청이 없습니다.
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Recent Applications */}
-            <div id="recent-applications" className="bg-white rounded-xl p-4 shadow-sm border">
-              <h3 className="font-semibold text-gray-800 mb-3">최근 처리된 계정</h3>
+            {/* Recent Activities */}
+            <div id="recent-activities" className="bg-white rounded-xl p-4 shadow-sm border">
+              <h3 className="font-semibold text-gray-800 mb-3">최근 처리 내역</h3>
               <div className="space-y-3">
                 {recentActivities.length > 0 ? recentActivities.map((activity, index) => (
                   <div key={`${activity.id}-${index}`} className="flex items-center gap-3">
@@ -491,15 +527,15 @@ const AdminPanel = () => {
                         {activity.name} ({activity.store})
                       </div>
                       <div className="text-xs text-gray-500">
-                        {activity.status === 'approved' ? '계정 승인 완료' : 
-                         activity.notes ? `${activity.notes}로 반려` : '서류 미비로 반려'} - {activity.time}
+                        {activity.status === 'approved' ? '계정 승인 완료' :
+                        activity.notes ? `${activity.notes}로 반려` : '서류 미비로 반려'} - {activity.time}
                       </div>
                     </div>
                   </div>
                 )) : (
                   <div className="text-center py-4 text-gray-500 text-sm">
-                    최근 처리된 계정이 없습니다.
-                    <br />
+                    최근 처리 내역이 없습니다.
+                    <br/>
                     <small className="text-gray-400">승인/거부 처리 후 여기에 표시됩니다</small>
                   </div>
                 )}
@@ -508,11 +544,11 @@ const AdminPanel = () => {
           </div>
         </main>
 
-        {/* Bottom Navigation - 통합된 네비게이션 */}
+        {/* Bottom Navigation - 4개 탭 */}
         <nav id="bottom-nav" className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-sm bg-white border-t border-gray-200 p-4">
-          <div className="grid grid-cols-3 gap-1">
-            <button 
-              className={`flex flex-col items-center gap-1 py-2 ${
+          <div className="grid grid-cols-4 gap-1">
+            <button
+              className={`flex flex-col items-center gap-1 py-2 text-xs ${
                 activeTab === 'dashboard' ? 'text-orange-500' : 'text-gray-400'
               }`}
               onClick={() => setActiveTab('dashboard')}
@@ -520,27 +556,49 @@ const AdminPanel = () => {
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 576 512">
                 <path d="M575.8 255.5c0 18-15 32.1-32 32.1h-32l.7 160.2c0 2.7-.2 5.4-.5 8.1V472c0 22.1-17.9 40-40 40H456c-1.1 0-2.2 0-3.3-.1c-1.4 .1-2.8 .1-4.2 .1H416 392c-22.1 0-40-17.9-40-40V448 384c0-17.7-14.3-32-32-32H256c-17.7 0-32 14.3-32 32v64 24c0 22.1-17.9 40-40 40H160 128.1c-1.5 0-3-.1-4.5-.2c-1.2 .1-2.4 .2-3.6 .2H104c-22.1 0-40-17.9-40-40V360c0-.9 0-1.9 .1-2.8V287.6H32c-18 0-32-14-32-32.1c0-9 3-17 10-24L266.4 8c7-7 15-8 22-8s15 2 21 7L564.8 231.5c8 7 12 15 11 24z"/>
               </svg>
-              <span className="text-xs">홈</span>
+              <span>홈</span>
             </button>
-            <button 
-              className={`flex flex-col items-center gap-1 py-2 relative ${
-                activeTab === 'account-manage' ? 'text-orange-500' : 'text-gray-400'
+            <button
+              className={`flex flex-col items-center gap-1 py-2 text-xs ${
+                activeTab === 'account-requests' ? 'text-orange-500' : 'text-gray-400'
               }`}
               onClick={() => {
-                console.log('👥 계정관리 탭 클릭');
-                setActiveTab('account-manage');
+                console.log('📋 가입신청 탭 클릭');
+                setActiveTab('account-requests');
               }}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 640 512">
                 <path d="M96 128a128 128 0 1 1 256 0A128 128 0 1 1 96 128zM0 482.3C0 383.8 79.8 304 178.3 304h91.4C368.2 304 448 383.8 448 482.3c0 16.4-13.3 29.7-29.7 29.7H29.7C13.3 512 0 498.7 0 482.3zM504 312V248H440c-13.3 0-24-10.7-24-24s10.7-24 24-24h64V136c0-13.3 10.7-24 24-24s24 10.7 24 24v64h64c13.3 0 24 10.7 24 24s-10.7 24-24 24H552v64c0 13.3-10.7 24-24 24s-24-10.7-24-24z"/>
               </svg>
-              <span className="text-xs">계정관리</span>
+              <span>가입신청</span>
             </button>
-            <button className="flex flex-col items-center gap-1 py-2 text-gray-400">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 512 512">
-                <path d="M495.9 166.6c3.2 8.7 .5 18.4-6.4 24.6l-43.3 39.4c1.1 8.3 1.7 16.8 1.7 25.4s-.6 17.1-1.7 25.4l43.3 39.4c6.9 6.2 9.6 15.9 6.4 24.6c-4.4 11.9-9.7 23.3-15.8 34.3l-4.7 8.1c-6.6 11-14 21.4-22.1 31.2c-5.9 7.2-15.7 9.6-24.5 6.8l-55.7-17.7c-13.4 10.3-28.2 18.9-44 25.4l-12.5 57.1c-2 9.1-9 16.3-18.2 17.8c-13.8 2.3-28 3.5-42.5 3.5s-28.7-1.2-42.5-3.5c-9.2-1.5-16.2-8.7-18.2-17.8l-12.5-57.1c-15.8-6.5-30.6-15.1-44-25.4L83.1 425.9c-8.8 2.8-18.6 .3-24.5-6.8c-8.1-9.8-15.5-20.2-22.1-31.2l-4.7-8.1c-6.1-11-11.4-22.4-15.8-34.3c-3.2-8.7-.5-18.4 6.4-24.6l43.3-39.4C64.6 273.1 64 264.6 64 256s.6-17.1 1.7-25.4L22.4 191.2c-6.9-6.2-9.6-15.9-6.4-24.6c4.4-11.9 9.7-23.3 15.8-34.3l4.7-8.1c6.6-11 14-21.4 22.1-31.2c5.9-7.2 15.7-9.6 24.5-6.8l55.7 17.7c13.4-10.3 28.2-18.9 44-25.4l12.5-57.1c2-9.1 9-16.3 18.2-17.8C227.3 1.2 241.5 0 256 0s28.7 1.2 42.5 3.5c9.2 1.5 16.2 8.7 18.2 17.8l12.5 57.1c15.8 6.5 30.6 15.1 44 25.4l55.7-17.7c8.8-2.8 18.6-.3 24.5 6.8c8.1 9.8 15.5 20.2 22.1 31.2l4.7 8.1c6.1 11 11.4 22.4 15.8 34.3zM256 336a80 80 0 1 0 0-160 80 80 0 1 0 0 160z"/>
+            <button
+              className={`flex flex-col items-center gap-1 py-2 text-xs ${
+                activeTab === 'store-manage' ? 'text-orange-500' : 'text-gray-400'
+              }`}
+              onClick={() => {
+                console.log('🏪 매장관리 탭 클릭');
+                setActiveTab('store-manage');
+              }}
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 576 512">
+                <path d="M547.6 103.8L490.3 13.1C485.2 5 476.1 0 466.4 0H109.6C99.9 0 90.8 5 85.7 13.1L28.3 103.8c-29.6 46.8-3.4 111.9 51.9 119.4c4 .5 8.1 .8 12.1 .8c26.1 0 49.3-11.4 65.2-29c15.9 17.6 39.1 29 65.2 29c26.1 0 49.3-11.4 65.2-29c15.9 17.6 39.1 29 65.2 29c26.2 0 49.3-11.4 65.2-29c16 17.6 39.1 29 65.2 29c4.1 0 8.1-.3 12.1-.8c55.5-7.4 81.8-72.5 52.1-119.4zM499.7 254.9l-.1 0c-5.3 .7-10.7 1.1-16.2 1.1c-12.4 0-24.3-1.9-35.4-5.3V384H128V250.6c-11.2 3.5-23.2 5.4-35.6 5.4c-5.5 0-11-.4-16.3-1.1l-.1 0c-4.1-.6-8.1-1.3-12-2.3V384v64c0 35.3 28.7 64 64 64H448c35.3 0 64-28.7 64-64V384 252.6c-4 1-8 1.8-12.3 2.3z"/>
               </svg>
-              <span className="text-xs">설정</span>
+              <span>매장관리</span>
+            </button>
+            <button
+              className={`flex flex-col items-center gap-1 py-2 text-xs ${
+                activeTab === 'user-manage' ? 'text-orange-500' : 'text-gray-400'
+              }`}
+              onClick={() => {
+                console.log('👥 회원관리 탭 클릭');
+                setActiveTab('user-manage');
+              }}
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 640 512">
+                <path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96c-.2 0-.4 0-.7 0H21.3C9.6 320 0 310.4 0 298.7zM405.3 320c-.2 0-.4 0-.7 0c26.6-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C592.2 192 640 239.8 640 298.7c0 11.8-9.6 21.3-21.3 21.3H405.3zM224 224a96 96 0 1 1 192 0 96 96 0 1 1 -192 0zM128 485.3C128 411.7 187.7 352 261.3 352H378.7C452.3 352 512 411.7 512 485.3c0 14.7-11.9 26.7-26.7 26.7H154.7c-14.7 0-26.7-11.9-26.7-26.7z"/>
+              </svg>
+              <span>회원관리</span>
             </button>
           </div>
         </nav>

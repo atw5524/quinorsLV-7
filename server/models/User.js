@@ -35,6 +35,11 @@ const userSchema = new mongoose.Schema({
     length: 4,
     match: [/^\d{4}$/, '연락처 뒷 4자리는 숫자만 가능합니다']
   },
+  department: {
+    type: String,
+    enum: ['여성', '남성', '슈즈'],
+    required: [true, '부서는 필수입니다']
+  },
   role: {
     type: String,
     enum: {
@@ -57,6 +62,14 @@ const userSchema = new mongoose.Schema({
   lockUntil: {
     type: Date
   },
+  // 비활성화 관련 필드
+  deactivatedAt: {
+    type: Date
+  },
+  deactivationReason: {
+    type: String,
+    trim: true
+  },
   requestId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AccountRequest'
@@ -66,14 +79,14 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['read', 'write', 'delete', 'admin']
   }],
-  profile: {
-    email: String,
-    phone: String,
-    department: String
+  notes: {
+    type: String,
+    trim: true,
+    maxlength: [500, '메모는 500자 이하여야 합니다']
   }
 }, {
   timestamps: true,
-  toJSON: { 
+  toJSON: {
     virtuals: true,
     transform: function(doc, ret) {
       // 비밀번호와 민감한 정보는 JSON 응답에서 제외
@@ -88,7 +101,7 @@ const userSchema = new mongoose.Schema({
 
 // 인덱스 설정
 userSchema.index({ userId: 1 }, { unique: true });
-userSchema.index({ storeCode: 1 });
+userSchema.index({ storeCode: 1, department: 1 });
 userSchema.index({ isActive: 1, role: 1 });
 userSchema.index({ createdAt: -1 });
 
@@ -98,16 +111,14 @@ userSchema.virtual('isLocked').get(function() {
 });
 
 userSchema.virtual('fullInfo').get(function() {
-  return `${this.managerName} (${this.userId}) - ${this.storeCode}`;
+  return `${this.managerName} (${this.userId}) - ${this.storeCode} ${this.department}`;
 });
 
 // 비밀번호 암호화 (저장 전)
 userSchema.pre('save', async function(next) {
-  // 비밀번호가 수정된 경우에만 암호화
   if (!this.isModified('password')) return next();
-  
+
   try {
-    // 비밀번호 해시화
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);
     next();
@@ -141,21 +152,19 @@ userSchema.methods.updateLastLogin = function() {
 };
 
 userSchema.methods.incLoginAttempts = function() {
-  // 잠금이 만료되었으면 초기화
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return this.updateOne({
       $unset: { lockUntil: 1 },
       $set: { loginAttempts: 1 }
     });
   }
-  
+
   const updates = { $inc: { loginAttempts: 1 } };
-  
-  // 5회 시도 후 계정 잠금 (1시간)
+
   if (this.loginAttempts + 1 >= 5 && !this.isLocked) {
     updates.$set = { lockUntil: Date.now() + 1000 * 60 * 60 }; // 1시간
   }
-  
+
   return this.updateOne(updates);
 };
 
@@ -192,7 +201,7 @@ userSchema.statics.getStats = async function() {
       }
     }
   ]);
-  
+
   return stats[0] || { total: 0, active: 0, inactive: 0, users: 0, admins: 0 };
 };
 
