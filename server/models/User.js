@@ -12,6 +12,13 @@ const userSchema = new mongoose.Schema({
     maxlength: 20,
     match: /^[a-z0-9]+$/
   },
+
+  department: {
+  type: String,
+  enum: ['여성', '남성', '슈즈'],
+  default: '여성'
+  },
+
   password: {
     type: String,
     required: true,

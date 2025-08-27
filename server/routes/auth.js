@@ -30,6 +30,9 @@ const registerLimiter = rateLimit({
 });
 
 // 📝 회원가입
+// server/routes/auth.js (수정된 버전)
+
+// 📝 회원가입
 router.post('/register', registerLimiter, async (req, res) => {
   try {
     const {
@@ -86,7 +89,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       });
     }
 
-    // 중복 아이디 검사
+    // 중복 아이디 검사 (아이디는 여전히 유니크해야 함)
     const existingUser = await User.findOne({ user_id });
     if (existingUser) {
       return res.status(409).json({
@@ -95,12 +98,23 @@ router.post('/register', registerLimiter, async (req, res) => {
       });
     }
 
-    // 중복 매장코드 검사
-    const existingDept = await User.findOne({ dept_name });
-    if (existingDept) {
+    // 🆕 중복 매장코드 검사 제거 - 같은 매장에 여러 담당자 허용
+    // 기존 코드 제거:
+    // const existingDept = await User.findOne({ dept_name });
+    // if (existingDept) {
+    //   return res.status(409).json({
+    //     success: false,
+    //     message: '이미 등록된 매장코드입니다.'
+    //   });
+    // }
+
+    // 🆕 중복 연락처 검사도 제거 (같은 매장 다른 담당자가 같은 번호 쓸 수도 있음)
+    // 하지만 필요하다면 이 부분은 유지할 수 있습니다.
+    const existingPhone = await User.findOne({ tel_no: phoneNumber });
+    if (existingPhone) {
       return res.status(409).json({
         success: false,
-        message: '이미 등록된 매장코드입니다.'
+        message: '이미 등록된 연락처입니다. 다른 연락처를 사용해주세요.'
       });
     }
 
@@ -136,15 +150,14 @@ router.post('/register', registerLimiter, async (req, res) => {
 
   } catch (error) {
     console.error('❌ 회원가입 에러:', error);
-    
+
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       const messages = {
         user_id: '이미 사용 중인 아이디입니다.',
-        dept_name: '이미 등록된 매장코드입니다.',
         tel_no: '이미 등록된 연락처입니다.'
+        // dept_name 제거 - 더 이상 중복 검사하지 않음
       };
-      
       return res.status(409).json({
         success: false,
         message: messages[field] || '중복된 정보가 있습니다.'

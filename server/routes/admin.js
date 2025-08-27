@@ -1,4 +1,3 @@
-// server/routes/admin.js
 const express = require('express');
 const User = require('../models/User');
 const Store = require('../models/Store');
@@ -126,42 +125,102 @@ router.get('/requests', async (req, res) => {
 });
 
 // ✅ 가입신청 승인
-router.put('/requests/:id/approve', auth, async (req, res) => {
+router.put('/requests/:id/approve', async (req, res) => {
   try {
     const requestId = req.params.id;
     const { notes } = req.body;
 
     console.log('✅ 가입신청 승인 처리 시작:', requestId);
 
-    // 가입신청 찾기
+    // 1. 요청 ID 유효성 검사
+    if (!requestId || !requestId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error('❌ 잘못된 요청 ID:', requestId);
+      return res.status(400).json({
+        success: false,
+        message: '잘못된 요청 ID입니다.'
+      });
+    }
+
+    // 2. 사용자 찾기
     const user = await User.findById(requestId);
     if (!user) {
+      console.error('❌ 사용자를 찾을 수 없음:', requestId);
       return res.status(404).json({
         success: false,
         message: '가입신청을 찾을 수 없습니다.'
       });
     }
 
-    // 이미 처리된 신청인지 확인
+    console.log('📋 승인할 사용자:', {
+      id: user._id,
+      user_id: user.user_id,
+      name: user.charge_name,
+      status: user.status
+    });
+
+    // 3. 이미 처리된 신청인지 확인
     if (user.status !== 'pending') {
+      console.error('❌ 이미 처리된 신청:', user.status);
       return res.status(400).json({
         success: false,
         message: `이미 ${user.status === 'approved' ? '승인' : '반려'}된 신청입니다.`
       });
     }
 
-    // 승인 처리 - 비밀번호는 그대로 유지
-    user.status = 'approved';
-    user.processedAt = new Date();
-    user.notes = notes || '관리자 승인 완료';
-    user.updated_at = new Date();
+    // 4. 사용자 승인 처리
+    try {
+      user.status = 'approved';
+      user.processedAt = new Date();
+      user.notes = notes || '관리자 승인 완료';
+      user.updated_at = new Date();
+      await user.save();
+      console.log('✅ 사용자 승인 완료:', user.user_id);
+    } catch (userError) {
+      console.error('❌ 사용자 승인 실패:', userError);
+      return res.status(500).json({
+        success: false,
+        message: '사용자 승인 중 오류가 발생했습니다: ' + userError.message
+      });
+    }
 
-    // 저장 (비밀번호는 변경하지 않음)
-    await user.save();
+    // 5. Store 컬렉션에 추가 (안전하게)
+    let storeCreated = false;
+    try {
+      console.log('🏪 Store 생성 시도:', {
+        storeName: user.cust_name,
+        storeCode: user.dept_name,
+        managerName: user.charge_name
+      });
 
-    console.log('✅ 가입신청 승인 완료:', user.user_id);
+      const newStore = new Store({
+        storeName: user.cust_name,
+        department: '여성',
+        storeCode: user.dept_name,
+        address: user.dong_name + (user.dong_detail ? ' ' + user.dong_detail : ''),
+        managerName: user.charge_name,
+        managerPhone: user.tel_no,
+        notes: `${user.user_id} 사용자 승인으로 자동 생성`,
+        isActive: true
+      });
 
-    // 응답 (임시 비밀번호 정보 제거)
+      await newStore.save();
+      storeCreated = true;
+      console.log('🏪 ✅ Store 생성 완료:', newStore._id);
+
+    } catch (storeError) {
+      console.error('🏪 ❌ Store 생성 실패:', {
+        message: storeError.message,
+        code: storeError.code,
+        keyPattern: storeError.keyPattern
+      });
+      
+      // Store 생성 실패해도 승인은 계속 진행
+      storeCreated = false;
+    }
+
+    // 6. 성공 응답
+    console.log('✅ 승인 처리 완료:', user.user_id);
+    
     res.json({
       success: true,
       message: '가입신청이 승인되었습니다.',
@@ -171,16 +230,20 @@ router.put('/requests/:id/approve', auth, async (req, res) => {
         storeName: user.cust_name,
         storeCode: user.dept_name,
         approvedAt: user.processedAt,
-        // 임시 비밀번호 정보 제거
-        message: '사용자는 가입신청 시 입력한 비밀번호로 로그인할 수 있습니다.'
+        storeCreated: storeCreated,
+        warning: storeCreated ? null : 'Store 생성에 실패했지만 사용자 승인은 완료되었습니다.'
       }
     });
 
   } catch (error) {
-    console.error('✅ 가입신청 승인 실패:', error);
+    console.error('❌ 승인 처리 전체 실패:', {
+      message: error.message,
+      stack: error.stack
+    });
+    
     res.status(500).json({
       success: false,
-      message: '승인 처리 중 오류가 발생했습니다.'
+      message: '승인 처리 중 오류가 발생했습니다: ' + error.message
     });
   }
 });
@@ -215,12 +278,10 @@ router.put('/requests/:id/reject', async (req, res) => {
       });
     }
 
-    // 사용자 정보 업데이트
     user.status = 'rejected';
     user.processedAt = new Date();
     user.notes = notes.trim();
     user.updated_at = new Date();
-
     await user.save();
 
     console.log('❌ 가입신청 반려 완료:', user.user_id);
@@ -248,11 +309,17 @@ router.put('/requests/:id/reject', async (req, res) => {
 router.get('/stores', async (req, res) => {
   try {
     console.log('🏪 매장 목록 조회 시작');
-
+    
     const stores = await Store.find()
-      .sort({ storeName: 1, department: 1 });
-
-    console.log('🏪 ✅ 매장 목록 조회 완료:', stores.length);
+      .sort({ storeName: 1, department: 1, managerName: 1 });
+    
+    console.log('🏪 ✅ 매장 목록 조회 완료:', stores.length, '개 엔트리');
+    console.log('🏪 📋 매장 목록 상세:', stores.map(s => ({
+      storeName: s.storeName,
+      storeCode: s.storeCode,
+      managerName: s.managerName,
+      department: s.department
+    })));
 
     res.json({
       success: true,
@@ -268,7 +335,7 @@ router.get('/stores', async (req, res) => {
   }
 });
 
-// 🏪 매장 등록
+// 🏪 매장 등록 (수정됨 - 중복 검사 제거)
 router.post('/stores', async (req, res) => {
   try {
     const {
@@ -281,7 +348,7 @@ router.post('/stores', async (req, res) => {
       notes
     } = req.body;
 
-    console.log('🏪 매장 등록 시작:', { storeName, department, storeCode });
+    console.log('🏪 매장 등록 시작:', { storeName, department, storeCode, managerName });
 
     // 필수 필드 검증
     if (!storeName || !department || !storeCode || !managerName || !managerPhone) {
@@ -291,16 +358,10 @@ router.post('/stores', async (req, res) => {
       });
     }
 
-    // 중복 매장코드 검사
-    const existingStore = await Store.findOne({ storeCode: storeCode.toUpperCase() });
-    if (existingStore) {
-      return res.status(409).json({
-        success: false,
-        message: '이미 사용 중인 매장코드입니다.'
-      });
-    }
+    // ✅ 중복 매장코드 검사 제거 - 같은 매장에 여러 담당자 허용
+    // 복합 인덱스로 같은 매장의 같은 담당자만 중복 방지됨
 
-    // 새 매장 생성
+    // 새 매장/담당자 생성
     const newStore = new Store({
       storeName: storeName.trim(),
       department,
@@ -314,7 +375,7 @@ router.post('/stores', async (req, res) => {
 
     await newStore.save();
 
-    console.log('🏪 ✅ 매장 등록 완료:', newStore.storeCode);
+    console.log('🏪 ✅ 매장 등록 완료:', newStore.storeCode, newStore.managerName);
 
     res.status(201).json({
       success: true,
@@ -328,7 +389,7 @@ router.post('/stores', async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
-        message: '이미 등록된 매장코드입니다.'
+        message: '동일한 매장의 동일한 담당자가 이미 등록되어 있습니다.'
       });
     }
 
@@ -355,21 +416,6 @@ router.put('/stores/:id', async (req, res) => {
       });
     }
 
-    // 매장코드 중복 검사 (자신 제외)
-    if (updateData.storeCode && updateData.storeCode !== store.storeCode) {
-      const existingStore = await Store.findOne({ 
-        storeCode: updateData.storeCode.toUpperCase(),
-        _id: { $ne: id }
-      });
-      
-      if (existingStore) {
-        return res.status(409).json({
-          success: false,
-          message: '이미 사용 중인 매장코드입니다.'
-        });
-      }
-    }
-
     // 업데이트 가능한 필드만 추출
     const allowedFields = ['storeName', 'department', 'storeCode', 'address', 'managerName', 'managerPhone', 'notes'];
     const filteredUpdate = {};
@@ -388,7 +434,7 @@ router.put('/stores/:id', async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    console.log('🏪 ✅ 매장 정보 수정 완료:', updatedStore.storeCode);
+    console.log('🏪 ✅ 매장 정보 수정 완료:', updatedStore.storeCode, updatedStore.managerName);
 
     res.json({
       success: true,
@@ -409,7 +455,6 @@ router.put('/stores/:id', async (req, res) => {
 router.delete('/stores/:id', async (req, res) => {
   try {
     const { id } = req.params;
-
     console.log('🏪 매장 삭제 시작:', id);
 
     const store = await Store.findById(id);
@@ -422,7 +467,7 @@ router.delete('/stores/:id', async (req, res) => {
 
     await Store.findByIdAndDelete(id);
 
-    console.log('🏪 ✅ 매장 삭제 완료:', store.storeCode);
+    console.log('🏪 ✅ 매장 삭제 완료:', store.storeCode, store.managerName);
 
     res.json({
       success: true,
@@ -533,7 +578,6 @@ router.put('/users/:id/status', async (req, res) => {
     user.isActive = isActive;
     user.notes = notes || user.notes;
     user.updated_at = new Date();
-
     await user.save();
 
     console.log('👥 ✅ 사용자 상태 변경 완료:', user.user_id);
@@ -560,7 +604,6 @@ router.put('/users/:id/status', async (req, res) => {
 router.post('/users/:id/reset-password', async (req, res) => {
   try {
     const { id } = req.params;
-
     console.log('🔑 비밀번호 초기화 시작:', id);
 
     const user = await User.findById(id);
@@ -580,7 +623,6 @@ router.post('/users/:id/reset-password', async (req, res) => {
 
     user.password = hashedTempPassword;
     user.updated_at = new Date();
-
     await user.save();
 
     console.log('🔑 ✅ 비밀번호 초기화 완료:', user.user_id);
