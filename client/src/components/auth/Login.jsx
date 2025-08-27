@@ -246,11 +246,9 @@ const Login = ({ onLogin, onNavigateToRegister, onNavigateToIdRequest }) => {
 
               {/* 안내 텍스트만 유지 */}
               <div className="text-center">
-                <p className="text-xs sm:text-sm text-gray-500 mb-3">계정이 없으신가요?</p>
                 <div className="text-xs text-gray-400 leading-relaxed">
                   • 회원가입 신청 후 관리자 승인을 기다려주세요<br/>
                   • 승인 완료 후 발급받은 ID로 로그인하세요<br/>
-                  • 최초 로그인 후 비밀번호를 변경해주세요
                 </div>
               </div>
             </div>

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
+const UserManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
     inactive: 0,
-    recentLogin: 0
+    admins: 0
   });
   const [allUsers, setAllUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -14,12 +14,10 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('전체');
   const [error, setError] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
-
-  // 회원 정보 수정 폼 데이터
   const [formData, setFormData] = useState({
-    user_id: '',
     cust_name: '',
     charge_name: '',
     tel_no: '',
@@ -29,19 +27,36 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
     notes: ''
   });
 
-  // 컴포넌트 마운트 상태 추적
   const isMountedRef = useRef(true);
   const intervalRef = useRef(null);
+
+  // 인증 헤더 생성 함수
+  const getAuthHeaders = () => {
+    if (!token) {
+      throw new Error('인증 토큰이 없습니다. 다시 로그인해주세요.');
+    }
+    
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  };
 
   // API 호출 함수들
   const fetchAllUsers = async () => {
     try {
       console.log('👥 승인된 회원 목록 API 호출 시작...');
       setLoading(true);
-      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/users');
+      
+      const response = await fetch('http://localhost:5480/api/admin/users', {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+      
       const result = await response.json();
       console.log('👥 승인된 회원 목록 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         const users = result.data || [];
         console.log('👥 ✅ 승인된 회원 목록 데이터 처리 성공:', users);
@@ -54,7 +69,13 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
         }
       } else {
         console.error('👥 ❌ 승인된 회원 목록 API 실패');
-        setError('승인된 회원 목록 조회 실패');
+        if (response.status === 401) {
+          setError('인증이 만료되었습니다. 다시 로그인해주세요.');
+        } else if (response.status === 403) {
+          setError('관리자 권한이 필요합니다.');
+        } else {
+          setError('승인된 회원 목록 조회 실패');
+        }
         if (isMountedRef.current) {
           setAllUsers([]);
           setFilteredUsers([]);
@@ -78,27 +99,69 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
     const total = userData.length;
     const active = userData.filter(user => user.isActive !== false).length;
     const inactive = userData.filter(user => user.isActive === false).length;
-    
-    // 최근 7일 내 로그인한 사용자
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const recentLogin = userData.filter(user => 
-      user.lastLoginAt && new Date(user.lastLoginAt) > weekAgo
-    ).length;
+    const admins = userData.filter(user => user.role === 'admin').length;
 
-    setStats({ total, active, inactive, recentLogin });
-    console.log('📊 회원 통계 계산:', { total, active, inactive, recentLogin });
+    setStats({ total, active, inactive, admins });
+    console.log('📊 회원 통계 계산:', { total, active, inactive, admins });
+  };
+
+  // 검색 및 필터링
+  const handleSearch = (term) => {
+    setSearchTerm(term);
+    filterUsers(term, activeFilter);
+  };
+
+  const handleFilterChange = (filter) => {
+    setActiveFilter(filter);
+    filterUsers(searchTerm, filter);
+  };
+
+  const filterUsers = (searchTerm, filter) => {
+    let filtered = [...allUsers];
+
+    // 검색 필터링
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(user =>
+        user.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.cust_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.charge_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.dept_name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // 상태 필터링
+    if (filter === '활성') {
+      filtered = filtered.filter(user => user.isActive !== false);
+    } else if (filter === '비활성') {
+      filtered = filtered.filter(user => user.isActive === false);
+    } else if (filter === '관리자') {
+      filtered = filtered.filter(user => user.role === 'admin');
+    }
+
+    setFilteredUsers(filtered);
+    console.log('🔍 회원 필터링 결과:', { searchTerm, filter, count: filtered.length });
+  };
+
+  // 폼 데이터 초기화
+  const resetFormData = () => {
+    setFormData({
+      cust_name: '',
+      charge_name: '',
+      tel_no: '',
+      dept_name: '',
+      dong_name: '',
+      dong_detail: '',
+      notes: ''
+    });
   };
 
   // 회원정보 수정
   const handleEditUser = async () => {
-    // 기본 정보 검증
     if (!formData.charge_name || !formData.tel_no) {
       alert('담당자명과 연락처는 필수 입력 항목입니다.');
       return;
     }
 
-    // 전화번호 형식 검증
     const phoneRegex = /^010-\d{4}-\d{4}$/;
     if (!phoneRegex.test(formData.tel_no)) {
       alert('올바른 휴대폰 번호 형식으로 입력해주세요. (010-0000-0000)');
@@ -107,12 +170,10 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
 
     try {
       console.log('✏️ 회원정보 수정 시작:', editingUser._id, formData);
-
-      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/users/${editingUser._id}`, {
+      
+      const response = await fetch(`http://localhost:5480/api/admin/users/${editingUser._id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           cust_name: formData.cust_name.trim(),
           charge_name: formData.charge_name.trim(),
@@ -126,7 +187,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
 
       const result = await response.json();
       console.log('✏️ 회원정보 수정 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         alert('회원정보가 성공적으로 수정되었습니다.');
         setEditingUser(null);
@@ -148,19 +209,16 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
     try {
       const newStatus = !currentStatus;
       console.log(`🔄 계정 상태 변경 시작: ${userId}, ${currentStatus} -> ${newStatus}`);
-
+      
       if (buttonElement) {
         buttonElement.innerHTML = '처리중...';
         buttonElement.disabled = true;
       }
-
       setProcessingIds(prev => new Set([...prev, userId]));
-
-      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/users/${userId}/status`, {
+      
+      const response = await fetch(`http://localhost:5480/api/admin/users/${userId}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           isActive: newStatus,
           notes: `관리자에 의한 ${newStatus ? '활성화' : '비활성화'}`
@@ -169,13 +227,12 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
 
       const result = await response.json();
       console.log('🔄 계정 상태 변경 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         setTimeout(() => {
           if (buttonElement) {
             const parentCard = buttonElement.closest('.bg-white');
             const statusBadge = parentCard.querySelector('span[class*="rounded-full"]');
-
             if (newStatus) {
               buttonElement.innerHTML = '비활성화';
               buttonElement.className = 'flex-1 py-2.5 bg-red-50 text-red-600 text-sm rounded-xl font-medium border border-red-200 hover:bg-red-100 transition-colors';
@@ -228,17 +285,15 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
 
     try {
       console.log('🔑 비밀번호 초기화 시작:', userId);
-
-      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/users/${userId}/reset-password`, {
+      
+      const response = await fetch(`http://localhost:5480/api/admin/users/${userId}/reset-password`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders()
       });
 
       const result = await response.json();
       console.log('🔑 비밀번호 초기화 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         alert(`🔑 비밀번호가 초기화되었습니다.\n\n새로운 임시 비밀번호: ${result.data.tempPassword}\n\n⚠️ 임시 비밀번호를 사용자에게 안전하게 전달해주세요.`);
       } else {
@@ -250,84 +305,40 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
     }
   };
 
-  // 폼 데이터 리셋
-  const resetFormData = () => {
+  // 수정 모드 시작
+  const startEdit = (user) => {
+    setEditingUser(user);
     setFormData({
-      user_id: '',
-      cust_name: '',
-      charge_name: '',
-      tel_no: '',
-      dept_name: '',
-      dong_name: '',
-      dong_detail: '',
-      notes: ''
+      cust_name: user.cust_name || '',
+      charge_name: user.charge_name || '',
+      tel_no: user.tel_no ? user.tel_no.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : '',
+      dept_name: user.dept_name || '',
+      dong_name: user.dong_name || '',
+      dong_detail: user.dong_detail || '',
+      notes: user.notes || ''
     });
   };
 
-  // 전화번호 포맷팅
-  const handlePhoneInput = (e) => {
-    const value = e.target.value.replace(/[^0-9]/g, '');
-    let formattedValue = value;
-    
-    if (value.length <= 3) {
-      formattedValue = value;
-    } else if (value.length <= 7) {
-      formattedValue = `${value.slice(0, 3)}-${value.slice(3)}`;
-    } else if (value.length <= 11) {
-      formattedValue = `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(7)}`;
-    }
-    
-    setFormData(prev => ({
-      ...prev,
-      tel_no: formattedValue
-    }));
-  };
-
-  // 검색 및 필터링
-  const handleSearch = (term) => {
-    setSearchTerm(term);
-    filterUsers(term, activeFilter);
-  };
-
-  const handleFilterChange = (filter) => {
-    setActiveFilter(filter);
-    filterUsers(searchTerm, filter);
-  };
-
-  const filterUsers = (searchTerm, filter) => {
-    let filtered = [...allUsers];
-
-    // 검색 필터링
-    if (searchTerm.trim()) {
-      filtered = filtered.filter(user =>
-        user.user_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.cust_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.charge_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.dept_name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    // 상태 필터링
-    if (filter === '활성') {
-      filtered = filtered.filter(user => user.isActive !== false);
-    } else if (filter === '비활성') {
-      filtered = filtered.filter(user => user.isActive === false);
-    }
-
-    setFilteredUsers(filtered);
-    console.log('🔍 필터링 결과:', { searchTerm, filter, count: filtered.length });
-  };
-
   // 상태별 뱃지 스타일
-  const getStatusBadge = (isActive) => {
-    return isActive !== false
-      ? 'bg-green-100 text-green-600'
-      : 'bg-gray-100 text-gray-600';
+  const getStatusBadge = (user) => {
+    if (user.role === 'admin') {
+      return 'bg-purple-100 text-purple-600';
+    } else if (user.isActive === false) {
+      return 'bg-gray-100 text-gray-600';
+    } else {
+      return 'bg-green-100 text-green-600';
+    }
   };
 
   // 상태별 텍스트
-  const getStatusText = (isActive) => {
-    return isActive !== false ? '활성' : '비활성';
+  const getStatusText = (user) => {
+    if (user.role === 'admin') {
+      return '관리자';
+    } else if (user.isActive === false) {
+      return '비활성';
+    } else {
+      return '활성';
+    }
   };
 
   // 매장명과 부서 분리 함수
@@ -351,79 +362,51 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
     return icons[department] || '🏪';
   };
 
-  // 최근 로그인 시간 계산
-  const getLastLoginText = (lastLoginAt) => {
-    if (!lastLoginAt) return '로그인 기록 없음';
-    
-    try {
-      const now = new Date();
-      const loginDate = new Date(lastLoginAt);
-      const diffMs = now - loginDate;
-      const diffDays = Math.floor(diffMs / 86400000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffMins = Math.floor(diffMs / 60000);
-
-      if (diffMins < 1) return '방금 전';
-      if (diffMins < 60) return `${diffMins}분 전`;
-      if (diffHours < 24) return `${diffHours}시간 전`;
-      if (diffDays < 7) return `${diffDays}일 전`;
-      return loginDate.toLocaleDateString('ko-KR');
-    } catch (error) {
-      return '알 수 없음';
-    }
-  };
-
   // 액션 버튼 렌더링
   const renderActionButtons = (user) => {
     const userId = user._id;
     const isProcessing = processingIds.has(userId);
     const isActive = user.isActive !== false;
+    const isAdmin = user.role === 'admin';
 
     return (
       <div className="mt-4 flex gap-2">
         <button
           className="flex-1 py-2.5 bg-blue-50 text-blue-600 text-sm rounded-xl font-medium border border-blue-200 hover:bg-blue-100 transition-colors"
-          onClick={() => {
-            setEditingUser(user);
-            setFormData({
-              user_id: user.user_id,
-              cust_name: user.cust_name,
-              charge_name: user.charge_name,
-              tel_no: user.tel_no ? user.tel_no.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : '',
-              dept_name: user.dept_name,
-              dong_name: user.dong_name || '',
-              dong_detail: user.dong_detail || '',
-              notes: user.notes || ''
-            });
-            setShowEditModal(true);
-          }}
+          onClick={() => startEdit(user)}
         >
-          정보수정
+          수정
         </button>
         <button
-          className={`flex-1 py-2.5 text-sm rounded-xl font-medium border transition-colors ${
-            isActive
-              ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
-              : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'
-          }`}
-          onClick={(e) => handleToggleUserStatus(userId, isActive, e.target)}
-          disabled={isProcessing}
-        >
-          {isProcessing ? '처리중...' : (isActive ? '비활성화' : '활성화')}
-        </button>
-        <button
-          className="px-3 py-2.5 bg-yellow-50 text-yellow-600 text-sm rounded-xl font-medium border border-yellow-200 hover:bg-yellow-100 transition-colors"
+          className="flex-1 py-2.5 bg-yellow-50 text-yellow-600 text-sm rounded-xl font-medium border border-yellow-200 hover:bg-yellow-100 transition-colors"
           onClick={() => handleResetPassword(userId, user.charge_name)}
-          title="비밀번호 초기화"
         >
-          🔑
+          비밀번호 초기화
         </button>
+        {!isAdmin && (
+          <button
+            className={`flex-1 py-2.5 text-sm rounded-xl font-medium border transition-colors ${
+              isActive 
+                ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' 
+                : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'
+            }`}
+            onClick={(e) => handleToggleUserStatus(userId, isActive, e.target)}
+            disabled={isProcessing}
+          >
+            {isProcessing ? '처리중...' : (isActive ? '비활성화' : '활성화')}
+          </button>
+        )}
       </div>
     );
   };
 
   // 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
+    if (!token) {
+      setError('인증 토큰이 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
     console.log('🚀 회원 관리 컴포넌트 마운트 - 데이터 로드 시작');
     isMountedRef.current = true;
     fetchAllUsers();
@@ -442,13 +425,13 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
         clearInterval(intervalRef.current);
       }
     };
-  }, []);
+  }, [token]);
 
   return (
     <div className="bg-gray-100 font-sans">
       <div id="mobile-container" className="w-full max-w-sm mx-auto bg-white shadow-lg min-h-screen">
         
-        {/* 에러 표시 (개발용) */}
+        {/* 에러 표시 */}
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded m-4">
             <strong className="font-bold">오류: </strong>
@@ -456,10 +439,10 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
           </div>
         )}
 
-        {/* 디버깅 정보 (개발용) */}
+        {/* 디버깅 정보 */}
         <div className="bg-blue-100 p-2 text-xs text-blue-800 m-4 rounded">
-          <div>👥 회원: 전체 {allUsers.length}명, 필터링 {filteredUsers.length}명</div>
-          <div>📊 Stats: 활성 {stats.active}, 비활성 {stats.inactive}, 최근접속 {stats.recentLogin}</div>
+          <div>👥 회원: 전체 {allUsers.length}개, 필터링 {filteredUsers.length}개</div>
+          <div>📊 Stats: 활성 {stats.active}, 비활성 {stats.inactive}, 관리자 {stats.admins}</div>
           <div>🔍 Filter: "{searchTerm}" / {activeFilter}</div>
           {loading && <div>⏳ 로딩 중...</div>}
         </div>
@@ -503,8 +486,8 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
               <div className="text-lg font-bold text-white">{stats.inactive}</div>
             </div>
             <div className="bg-white/10 rounded-xl p-3">
-              <div className="text-white/80 text-xs mb-1">최근접속</div>
-              <div className="text-lg font-bold text-white">{stats.recentLogin}</div>
+              <div className="text-white/80 text-xs mb-1">관리자</div>
+              <div className="text-lg font-bold text-white">{stats.admins}</div>
             </div>
           </div>
         </header>
@@ -527,7 +510,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
               </svg>
             </div>
             <div className="flex gap-2">
-              {['전체', '활성', '비활성'].map(filter => (
+              {['전체', '활성', '비활성', '관리자'].map(filter => (
                 <button
                   key={filter}
                   className={`px-4 py-2 text-sm rounded-lg whitespace-nowrap transition-colors ${
@@ -550,7 +533,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
                 ⏳ 회원 목록을 불러오는 중...
               </div>
             ) : filteredUsers.length > 0 ? filteredUsers.map((user, index) => {
-              const { storeName, department } = parseStoreName(user.cust_name);
+              const { storeName, department } = parseStoreName(user.cust_name || '');
               
               return (
                 <div key={user._id || index} className="bg-white rounded-2xl p-4 shadow-md border border-gray-100 relative overflow-hidden">
@@ -561,20 +544,23 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 640 512">
-                          <path d="M144 0a80 80 0 1 1 0 160A80 80 0 1 1 144 0zM512 0a80 80 0 1 1 0 160A80 80 0 1 1 512 0zM0 298.7C0 239.8 47.8 192 106.7 192h42.7c15.9 0 31 3.5 44.6 9.7c-1.3 7.2-1.9 14.7-1.9 22.3c0 38.2 16.8 72.5 43.3 96c-.2 0-.4 0-.7 0H21.3C9.6 320 0 310.4 0 298.7zM405.3 320c-.2 0-.4 0-.7 0c26.6-23.5 43.3-57.8 43.3-96c0-7.6-.7-15-1.9-22.3c13.6-6.3 28.7-9.7 44.6-9.7h42.7C592.2 192 640 239.8 640 298.7c0 11.8-9.6 21.3-21.3 21.3H405.3zM224 224a96 96 0 1 1 192 0 96 96 0 1 1 -192 0zM128 485.3C128 411.7 187.7 352 261.3 352H378.7C452.3 352 512 411.7 512 485.3c0 14.7-11.9 26.7-26.7 26.7H154.7c-14.7 0-26.7-11.9-26.7-26.7z"/>
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 448 512">
+                          <path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm-45.7 48C79.8 304 0 383.8 0 482.3C0 498.7 13.3 512 29.7 512H418.3c16.4 0 29.7-13.3 29.7-29.7C448 383.8 368.2 304 269.7 304H178.3z"/>
                         </svg>
                       </div>
                       <div>
                         <h3 className="font-bold text-gray-800 text-lg">{user.user_id}</h3>
                         <p className="text-sm text-gray-600 font-medium">{user.charge_name}</p>
                         <p className="text-xs text-gray-400">
-                          가입: {new Date(user.createdAt).toLocaleDateString('ko-KR')}
+                          {user.lastLoginAt 
+                            ? `최근 로그인: ${new Date(user.lastLoginAt).toLocaleDateString('ko-KR')}` 
+                            : '로그인 기록 없음'
+                          }
                         </p>
                       </div>
                     </div>
-                    <span className={`px-3 py-1.5 text-xs rounded-full font-medium border ${getStatusBadge(user.isActive)}`}>
-                      {getStatusText(user.isActive)}
+                    <span className={`px-3 py-1.5 text-xs rounded-full font-medium border ${getStatusBadge(user)}`}>
+                      {getStatusText(user)}
                     </span>
                   </div>
 
@@ -609,15 +595,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
                     </div>
                   )}
 
-                  {/* 로그인 정보 */}
-                  <div className="bg-purple-50 p-3 rounded-lg mb-3">
-                    <div className="text-xs text-purple-600 font-medium">로그인 정보</div>
-                    <div className="text-sm text-purple-800">
-                      최근 접속: {getLastLoginText(user.lastLoginAt)}
-                    </div>
-                  </div>
-
-                  {/* 메모 (있는 경우) */}
+                  {/* 메모 정보 */}
                   {user.notes && (
                     <div className="bg-gray-50 p-3 rounded-lg mb-3">
                       <div className="text-xs text-gray-600 font-medium">메모</div>
@@ -639,14 +617,13 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
         </main>
 
         {/* 회원정보 수정 모달 */}
-        {showEditModal && editingUser && (
+        {editingUser && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-gray-800">회원정보 수정</h3>
                 <button
                   onClick={() => {
-                    setShowEditModal(false);
                     setEditingUser(null);
                     resetFormData();
                   }}
@@ -657,110 +634,110 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
                   </svg>
                 </button>
               </div>
-
               <div className="space-y-4">
-                {/* 아이디 (읽기 전용) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">아이디</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">아이디 (수정불가)</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none"
-                    value={formData.user_id}
-                    readOnly
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500"
+                    value={editingUser.user_id}
+                    disabled
                   />
                 </div>
-
-                {/* 매장명 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">매장명</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">매장명</label>
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                     value={formData.cust_name}
-                    onChange={(e) => setFormData({ ...formData, cust_name: e.target.value })}
+                    onChange={(e) => setFormData({...formData, cust_name: e.target.value})}
+                    placeholder="매장명"
                   />
                 </div>
-
-                {/* 담당자명 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">담당자명 *</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">담당자명 *</label>
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                     value={formData.charge_name}
-                    onChange={(e) => setFormData({ ...formData, charge_name: e.target.value })}
+                    onChange={(e) => setFormData({...formData, charge_name: e.target.value})}
+                    placeholder="담당자 이름"
                   />
                 </div>
-
-                {/* 연락처 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">연락처 *</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">연락처 *</label>
                   <input
-                    type="text"
+                    type="tel"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="010-0000-0000"
                     value={formData.tel_no}
-                    onChange={handlePhoneInput}
-                    maxLength="13"
+                    onChange={(e) => {
+                      let value = e.target.value.replace(/[^0-9]/g, '');
+                      if (value.length <= 11) {
+                        if (value.length > 6) {
+                          value = value.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+                        } else if (value.length > 3) {
+                          value = value.replace(/(\d{3})(\d{0,4})/, '$1-$2');
+                        }
+                        setFormData({...formData, tel_no: value});
+                      }
+                    }}
+                    placeholder="010-0000-0000"
                   />
                 </div>
-
-                {/* 매장코드 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">매장코드</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">매장코드</label>
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
                     value={formData.dept_name}
-                    onChange={(e) => setFormData({ ...formData, dept_name: e.target.value.toUpperCase() })}
+                    onChange={(e) => setFormData({...formData, dept_name: e.target.value.toUpperCase()})}
+                    placeholder="매장코드"
                   />
                 </div>
-
-                {/* 주소 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">주소</label>
-                  <input
-                    type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 mb-2"
-                    value={formData.dong_name}
-                    onChange={(e) => setFormData({ ...formData, dong_name: e.target.value })}
-                  />
+                  <label className="block text-sm font-medium text-gray-600 mb-1">주소</label>
                   <input
                     type="text"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="상세주소"
-                    value={formData.dong_detail}
-                    onChange={(e) => setFormData({ ...formData, dong_detail: e.target.value })}
+                    value={formData.dong_name}
+                    onChange={(e) => setFormData({...formData, dong_name: e.target.value})}
+                    placeholder="주소"
                   />
                 </div>
-
-                {/* 메모 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">메모</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">상세주소</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    value={formData.dong_detail}
+                    onChange={(e) => setFormData({...formData, dong_detail: e.target.value})}
+                    placeholder="상세주소"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">메모</label>
                   <textarea
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="추가 정보나 메모"
                     rows="3"
                     value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                    placeholder="추가 메모"
                   />
                 </div>
               </div>
-
-              <div className="flex gap-3 mt-6">
+              <div className="mt-6 flex gap-2">
                 <button
-                  className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
                   onClick={() => {
-                    setShowEditModal(false);
                     setEditingUser(null);
                     resetFormData();
                   }}
+                  className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
                 >
                   취소
                 </button>
                 <button
-                  className="flex-1 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
                   onClick={handleEditUser}
+                  className="flex-1 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
                 >
                   수정
                 </button>
@@ -769,7 +746,96 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab }) => {
           </div>
         )}
 
-        {/* Bottom Navigation - 4개 탭 통일 */}
+        {/* 상세보기 모달 */}
+        {showDetailModal && selectedUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-800">회원 상세 정보</h3>
+                <button
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
+                  </svg>
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">아이디</label>
+                  <p className="text-gray-800 font-semibold">{selectedUser.user_id}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">매장명</label>
+                  <p className="text-gray-800">{selectedUser.cust_name}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">담당자명</label>
+                  <p className="text-gray-800">{selectedUser.charge_name}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">매장코드</label>
+                  <p className="text-gray-800">{selectedUser.dept_name}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">연락처</label>
+                  <p className="text-gray-800">
+                    {selectedUser.tel_no ? selectedUser.tel_no.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : '정보 없음'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">주소</label>
+                  <p className="text-gray-800">{selectedUser.dong_name}</p>
+                  {selectedUser.dong_detail && (
+                    <p className="text-gray-600 text-sm">{selectedUser.dong_detail}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">가입일</label>
+                  <p className="text-gray-800">{new Date(selectedUser.createdAt).toLocaleString('ko-KR')}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">최근 로그인</label>
+                  <p className="text-gray-800">
+                    {selectedUser.lastLoginAt 
+                      ? new Date(selectedUser.lastLoginAt).toLocaleString('ko-KR')
+                      : '로그인 기록 없음'
+                    }
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-600">계정상태</label>
+                  <span className={`inline-block px-3 py-1 text-sm rounded-full font-medium ${getStatusBadge(selectedUser)}`}>
+                    {getStatusText(selectedUser)}
+                  </span>
+                </div>
+                {selectedUser.notes && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600">메모</label>
+                    <p className="text-gray-800">{selectedUser.notes}</p>
+                  </div>
+                )}
+              </div>
+              <div className="mt-6">
+                <button
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setSelectedUser(null);
+                  }}
+                  className="w-full py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom Navigation */}
         <nav id="bottom-nav" className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-sm bg-white border-t border-gray-200 p-4">
           <div className="grid grid-cols-4 gap-1">
             <button

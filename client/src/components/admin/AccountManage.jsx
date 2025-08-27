@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
+const AccountManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -17,19 +17,36 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
 
-  // 컴포넌트 마운트 상태 추적
   const isMountedRef = useRef(true);
   const intervalRef = useRef(null);
+
+  // 인증 헤더 생성 함수
+  const getAuthHeaders = () => {
+    if (!token) {
+      throw new Error('인증 토큰이 없습니다. 다시 로그인해주세요.');
+    }
+    
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  };
 
   // API 호출 함수들
   const fetchAllRequests = async () => {
     try {
       console.log('📋 가입신청 목록 API 호출 시작...');
       setLoading(true);
-      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/requests');
+      
+      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/requests', {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+      
       const result = await response.json();
       console.log('📋 가입신청 목록 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         const requests = result.data || [];
         console.log('📋 ✅ 가입신청 목록 데이터 처리 성공:', requests);
@@ -42,7 +59,13 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
         }
       } else {
         console.error('📋 ❌ 가입신청 목록 API 실패');
-        setError('가입신청 목록 조회 실패');
+        if (response.status === 401) {
+          setError('인증이 만료되었습니다. 다시 로그인해주세요.');
+        } else if (response.status === 403) {
+          setError('관리자 권한이 필요합니다.');
+        } else {
+          setError('가입신청 목록 조회 실패');
+        }
         if (isMountedRef.current) {
           setAllRequests([]);
           setFilteredRequests([]);
@@ -83,14 +106,11 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
         buttonElement.innerHTML = '처리중...';
         buttonElement.disabled = true;
       }
-
       setProcessingIds(prev => new Set([...prev, requestId]));
-
+      
       const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/approve`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           notes: '관리자 승인 완료'
         }),
@@ -98,7 +118,7 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
 
       const result = await response.json();
       console.log('✅ 승인 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         setTimeout(() => {
           if (buttonElement) {
@@ -111,13 +131,11 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
           }
         }, 1500);
 
-        // 승인 완료 알림
         let message = '✅ 가입신청이 승인되었습니다!';
         if (result.data && result.data.userId && result.data.tempPassword) {
           message += `\n\n📋 생성된 계정 정보:\n• 사용자 ID: ${result.data.userId}\n• 임시 비밀번호: ${result.data.tempPassword}\n\n⚠️ 임시 비밀번호를 신청자에게 안전하게 전달해주세요.`;
         }
         alert(message);
-
         await fetchAllRequests();
       } else {
         console.error('✅ 승인 실패:', result);
@@ -157,20 +175,17 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
         buttonElement.innerHTML = '처리중...';
         buttonElement.disabled = true;
       }
-
       setProcessingIds(prev => new Set([...prev, requestId]));
-
+      
       const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/reject`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ notes }),
       });
 
       const result = await response.json();
       console.log('❌ 반려 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         setTimeout(() => {
           if (buttonElement) {
@@ -301,7 +316,6 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
     const isProcessing = processingIds.has(requestId);
 
     if (request.status === 'pending') {
-      // 대기 중인 신청 - 승인, 반려 버튼
       return (
         <div className="mt-4 flex gap-2">
           <button
@@ -321,7 +335,6 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
         </div>
       );
     } else {
-      // 처리 완료된 신청 - 상세보기 버튼
       return (
         <div className="mt-4">
           <button
@@ -340,6 +353,11 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
 
   // 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
+    if (!token) {
+      setError('인증 토큰이 없습니다. 다시 로그인해주세요.');
+      return;
+    }
+
     console.log('🚀 가입신청 관리 컴포넌트 마운트 - 데이터 로드 시작');
     isMountedRef.current = true;
     fetchAllRequests();
@@ -358,7 +376,7 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
         clearInterval(intervalRef.current);
       }
     };
-  }, []);
+  }, [token]);
 
   return (
     <div className="bg-gray-100 font-sans">
@@ -569,7 +587,6 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
                   </svg>
                 </button>
               </div>
-
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-600">아이디</label>
@@ -623,7 +640,6 @@ const AccountManage = ({ onBackToAdmin, onNavigateToTab }) => {
                   </div>
                 )}
               </div>
-
               <div className="mt-6">
                 <button
                   onClick={() => {

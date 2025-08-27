@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import AccountManage from './AccountManage';
 import StoreManage from './StoreManage';
 import UserManage from './UserManage';
 
 const AdminPanel = () => {
-  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'account-requests', 'store-manage', 'user-manage'
+  const { token, user, isLoggedIn } = useAuth();
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [stats, setStats] = useState({
     requests: { total: 0, pending: 0, approved: 0, rejected: 0 },
     stores: { totalStores: 0, totalDepartments: 0, totalManagers: 0 },
@@ -16,9 +18,36 @@ const AdminPanel = () => {
   const [recentActivities, setRecentActivities] = useState([]);
   const [error, setError] = useState(null);
 
-  // 컴포넌트 마운트 상태 추적
   const isMountedRef = useRef(true);
   const intervalRef = useRef(null);
+
+  // 인증 헤더 생성 함수
+  const getAuthHeaders = () => {
+    if (!token) {
+      throw new Error('인증 토큰이 없습니다. 다시 로그인해주세요.');
+    }
+    
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`
+    };
+  };
+
+  // 관리자 권한 확인
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setError('로그인이 필요합니다.');
+      return;
+    }
+    
+    if (user?.role !== 'admin') {
+      setError('관리자 권한이 필요합니다.');
+      return;
+    }
+    
+    console.log('✅ 관리자 권한 확인 완료:', user.user_id);
+  }, [isLoggedIn, user]);
 
   // 탭 네비게이션 콜백 함수
   const handleNavigateToTab = (tabName) => {
@@ -26,21 +55,19 @@ const AdminPanel = () => {
     setActiveTab(tabName);
   };
 
-  // 안전한 상태 업데이트 함수
-  const safeSetState = (setter) => {
-    if (isMountedRef.current) {
-      setter();
-    }
-  };
-
   // API 호출 함수들
   const fetchStats = async () => {
     try {
       console.log('📊 통계 API 호출 시작...');
-      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/stats');
+      
+      const response = await fetch('http://localhost:5480/api/admin/stats', {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+      
       const result = await response.json();
       console.log('📊 통계 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         console.log('📊 ✅ 통계 데이터 처리 성공:', result.data);
         if (isMountedRef.current) {
@@ -49,7 +76,13 @@ const AdminPanel = () => {
         }
       } else {
         console.error('📊 ❌ 통계 API 실패:', result);
-        setError('통계 조회 실패: ' + (result.message || 'Unknown error'));
+        if (response.status === 401) {
+          setError('인증이 만료되었습니다. 다시 로그인해주세요.');
+        } else if (response.status === 403) {
+          setError('관리자 권한이 필요합니다.');
+        } else {
+          setError('통계 조회 실패: ' + (result.message || 'Unknown error'));
+        }
       }
     } catch (error) {
       console.error('📊 ❌ 통계 조회 네트워크 오류:', error);
@@ -61,10 +94,15 @@ const AdminPanel = () => {
     try {
       console.log('📋 신청 목록 API 호출 시작... status:', status);
       setLoading(true);
-      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests?status=${status}`);
+      
+      const response = await fetch(`http://localhost:5480/api/admin/requests?status=${status}`, {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+      
       const result = await response.json();
       console.log('📋 신청 목록 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         console.log('📋 ✅ 신청 목록 데이터 처리 성공:', result.data);
         if (isMountedRef.current) {
@@ -75,7 +113,13 @@ const AdminPanel = () => {
         }
       } else {
         console.error('📋 ❌ 신청 목록 API 실패:', result);
-        setError('신청 목록 조회 실패: ' + (result.message || 'Unknown error'));
+        if (response.status === 401) {
+          setError('인증이 만료되었습니다. 다시 로그인해주세요.');
+        } else if (response.status === 403) {
+          setError('관리자 권한이 필요합니다.');
+        } else {
+          setError('신청 목록 조회 실패: ' + (result.message || 'Unknown error'));
+        }
         if (isMountedRef.current) {
           setRequests([]);
         }
@@ -100,7 +144,6 @@ const AdminPanel = () => {
     }
 
     console.log('🔄 최근 활동 업데이트 시작, 전체 데이터:', requestsData.length);
-
     const processedRequests = requestsData.filter(req => {
       const hasProcessedDate = req.processedAt;
       const isProcessed = req.status === 'approved' || req.status === 'rejected';
@@ -149,19 +192,17 @@ const AdminPanel = () => {
 
     try {
       console.log('✅ 승인 처리 시작:', requestId);
-
+      
       if (buttonElement) {
         buttonElement.innerHTML = '처리중...';
         buttonElement.disabled = true;
       }
-
+      
       setProcessingIds(prev => new Set([...prev, requestId]));
-
-      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/approve`, {
+      
+      const response = await fetch(`http://localhost:5480/api/admin/requests/${requestId}/approve`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           notes: '관리자 승인 완료'
         }),
@@ -169,7 +210,7 @@ const AdminPanel = () => {
 
       const result = await response.json();
       console.log('✅ 승인 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         setTimeout(() => {
           if (buttonElement) {
@@ -186,8 +227,8 @@ const AdminPanel = () => {
         if (result.data && result.data.userId && result.data.tempPassword) {
           alertMessage += `\n\n📋 생성된 계정 정보:\n• 사용자 ID: ${result.data.userId}\n• 임시 비밀번호: ${result.data.tempPassword}`;
         }
-        alert(alertMessage);
 
+        alert(alertMessage);
         await Promise.all([fetchRequests(), fetchStats()]);
       } else {
         console.error('✅ 승인 실패:', result);
@@ -221,25 +262,23 @@ const AdminPanel = () => {
       if (!notes) return;
 
       console.log('❌ 거부 처리 시작:', requestId);
-
+      
       if (buttonElement) {
         buttonElement.innerHTML = '처리중...';
         buttonElement.disabled = true;
       }
-
+      
       setProcessingIds(prev => new Set([...prev, requestId]));
-
-      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/reject`, {
+      
+      const response = await fetch(`http://localhost:5480/api/admin/requests/${requestId}/reject`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ notes }),
       });
 
       const result = await response.json();
       console.log('❌ 거부 API 응답:', result);
-
+      
       if (response.ok && result.success) {
         setTimeout(() => {
           if (buttonElement) {
@@ -280,11 +319,16 @@ const AdminPanel = () => {
 
   // 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
+    if (!isLoggedIn || user?.role !== 'admin') {
+      return;
+    }
+
     console.log('🚀 관리자 패널 마운트 - 데이터 로드 시작');
     isMountedRef.current = true;
+    
     fetchStats();
     fetchRequests();
-
+    
     intervalRef.current = setInterval(() => {
       if (isMountedRef.current) {
         console.log('🔄 자동 새로고침 실행');
@@ -300,7 +344,61 @@ const AdminPanel = () => {
         clearInterval(intervalRef.current);
       }
     };
-  }, []);
+  }, [isLoggedIn, user, token]);
+
+  // 인증 확인
+  if (!isLoggedIn) {
+    return (
+      <div className="bg-gray-100 font-sans min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">로그인이 필요합니다</h2>
+          <p className="text-gray-600">관리자 패널에 접근하려면 로그인해주세요.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user?.role !== 'admin') {
+    return (
+      <div className="bg-gray-100 font-sans min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">관리자 권한이 필요합니다</h2>
+          <p className="text-gray-600">이 페이지는 관리자만 접근할 수 있습니다.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 각 탭별 컴포넌트 렌더링
+  if (activeTab === 'account-requests') {
+    return (
+      <AccountManage 
+        onBackToAdmin={() => setActiveTab('dashboard')} 
+        onNavigateToTab={handleNavigateToTab}
+        token={token}
+      />
+    );
+  }
+
+  if (activeTab === 'store-manage') {
+    return (
+      <StoreManage 
+        onBackToAdmin={() => setActiveTab('dashboard')} 
+        onNavigateToTab={handleNavigateToTab}
+        token={token}
+      />
+    );
+  }
+
+  if (activeTab === 'user-manage') {
+    return (
+      <UserManage 
+        onBackToAdmin={() => setActiveTab('dashboard')} 
+        onNavigateToTab={handleNavigateToTab}
+        token={token}
+      />
+    );
+  }
 
   // 계산된 값들
   const todayRequests = requests.filter(req => {
@@ -329,34 +427,6 @@ const AdminPanel = () => {
     loading,
     error
   });
-
-  // 각 탭별 컴포넌트 렌더링
-  if (activeTab === 'account-requests') {
-    return (
-      <AccountManage 
-        onBackToAdmin={() => setActiveTab('dashboard')} 
-        onNavigateToTab={handleNavigateToTab}
-      />
-    );
-  }
-
-  if (activeTab === 'store-manage') {
-    return (
-      <StoreManage 
-        onBackToAdmin={() => setActiveTab('dashboard')} 
-        onNavigateToTab={handleNavigateToTab}
-      />
-    );
-  }
-
-  if (activeTab === 'user-manage') {
-    return (
-      <UserManage 
-        onBackToAdmin={() => setActiveTab('dashboard')} 
-        onNavigateToTab={handleNavigateToTab}
-      />
-    );
-  }
 
   // 대시보드 렌더링
   return (
@@ -430,7 +500,7 @@ const AdminPanel = () => {
         <main id="main-content" className="p-4 pb-20">
           <div id="dashboard-overview" className="mb-6">
             <h2 className="text-lg font-bold text-gray-800 mb-4">시스템 현황</h2>
-
+            
             {/* System Stats */}
             <div id="system-stats" className="grid grid-cols-2 gap-4 mb-6">
               <div className="bg-white rounded-xl p-4 shadow-sm border">
@@ -459,7 +529,6 @@ const AdminPanel = () => {
                   전체보기
                 </button>
               </div>
-
               <div className="space-y-3">
                 {loading ? (
                   <div className="text-center py-4 text-gray-500 text-sm">
