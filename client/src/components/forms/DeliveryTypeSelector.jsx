@@ -8,7 +8,7 @@ import Button from '../ui/Button';
 
 const DeliveryTypeSelector = () => {
   const context = useDelivery();
-  const { user, logout, changePassword } = useAuth();
+  const { user, logout, changePassword, token } = useAuth();
   const navigate = useNavigate();
   
   // 사용자 메뉴 관련 상태
@@ -21,6 +21,8 @@ const DeliveryTypeSelector = () => {
   });
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [storeName, setStoreName] = useState('');
+  const [userDetails, setUserDetails] = useState(null);
+  const [loadingUserDetails, setLoadingUserDetails] = useState(true);
 
   // 안전성 체크 추가
   if (!context) {
@@ -50,7 +52,61 @@ const DeliveryTypeSelector = () => {
     return avatarUrl;
   };
 
-  // 매장명 조회 함수
+  // 사용자 상세 정보 가져오기
+  const fetchUserDetails = async () => {
+    if (!user || !token) {
+      setLoadingUserDetails(false);
+      return;
+    }
+
+    try {
+      console.log('👤 사용자 상세 정보 조회 시작:', user.user_id || user.userId);
+      
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/auth/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        console.log('👤 ✅ 사용자 정보 조회 성공:', result.data);
+        setUserDetails(result.data);
+        
+        // 매장명 설정
+        if (result.data.cust_name) {
+          setStoreName(result.data.cust_name);
+        } else if (result.data.dept_name) {
+          setStoreName(result.data.dept_name);
+        }
+      } else {
+        console.error('👤 ❌ 사용자 정보 조회 실패:', result);
+        // 기존 user 정보 사용
+        setUserDetails(user);
+        if (user.storeName) {
+          setStoreName(user.storeName);
+        } else if (user.storeCode) {
+          setStoreName(user.storeCode);
+        }
+      }
+    } catch (error) {
+      console.error('👤 ❌ 네트워크 오류:', error);
+      // 기존 user 정보 사용
+      setUserDetails(user);
+      if (user.storeName) {
+        setStoreName(user.storeName);
+      } else if (user.storeCode) {
+        setStoreName(user.storeCode);
+      }
+    } finally {
+      setLoadingUserDetails(false);
+    }
+  };
+
+  // 매장명 조회 함수 (기존 유지)
   const fetchStoreName = async (storeCode) => {
     try {
       const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/stores?search=${storeCode}&limit=1`);
@@ -72,16 +128,12 @@ const DeliveryTypeSelector = () => {
     }
   };
 
-  // 사용자 정보 변경 시 매장명 조회
+  // 사용자 정보 변경 시 상세 정보 조회
   useEffect(() => {
-    if (user && user.storeCode) {
-      if (user.storeName) {
-        setStoreName(user.storeName);
-      } else {
-        fetchStoreName(user.storeCode);
-      }
+    if (user && token) {
+      fetchUserDetails();
     }
-  }, [user]);
+  }, [user, token]);
 
   // 사용자 메뉴 외부 클릭 시 닫기
   useEffect(() => {
@@ -184,6 +236,25 @@ const DeliveryTypeSelector = () => {
     }
   };
 
+  // 표시할 사용자 정보 계산
+  const getDisplayUserInfo = () => {
+    const currentUser = userDetails || user;
+    if (!currentUser) return { name: '사용자', store: '매장', department: '' };
+
+    // 담당자명
+    const name = currentUser.charge_name || currentUser.managerName || currentUser.name || '담당자';
+    
+    // 매장명 (더 간단하게)
+    const store = storeName || currentUser.cust_name || currentUser.storeName || currentUser.storeCode || '매장';
+    
+    // 부서명 (중복 제거)
+    const department = currentUser.department || '';
+
+    return { name, store, department };
+  };
+
+  const displayInfo = getDisplayUserInfo();
+
   return (
     <div className="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
       <div className="w-full max-w-sm mx-auto bg-white shadow-lg rounded-3xl overflow-hidden h-screen max-h-[812px] flex flex-col relative">
@@ -196,7 +267,7 @@ const DeliveryTypeSelector = () => {
               <div className="flex items-center gap-3">
                 {/* 사용자 이름 기반 아바타 */}
                 <img 
-                  src={generateAvatarUrl(user.managerName)}
+                  src={generateAvatarUrl(displayInfo.name)}
                   alt="User Avatar" 
                   className="w-10 h-10 rounded-full border-2 border-orange-500/20 bg-orange-500"
                   onError={(e) => {
@@ -217,20 +288,34 @@ const DeliveryTypeSelector = () => {
                     ctx.font = 'bold 16px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    const firstChar = user.managerName ? user.managerName.charAt(0) : 'U';
+                    const firstChar = displayInfo.name.charAt(0);
                     ctx.fillText(firstChar, 20, 20);
                     
                     e.target.src = canvas.toDataURL();
                   }}
                 />
                 <div>
-                  <p className="text-sm font-bold text-gray-800">{user.managerName}님</p>
-                  <p className="text-xs text-gray-500">
-                    {storeName || user.storeCode} 매니저
-                    {user.department && ` • ${user.department}부`}
-                  </p>
+                  {loadingUserDetails ? (
+                    <div className="animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-20 mb-1"></div>
+                      <div className="h-3 bg-gray-200 rounded w-24"></div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* 첫 번째 줄: 이름 + 매니저 */}
+                      <p className="text-sm font-bold text-gray-800">
+                        {displayInfo.name} 매니저
+                      </p>
+                      {/* 두 번째 줄: 매장명 + 부서 */}
+                      <p className="text-xs text-gray-500">
+                        {displayInfo.store}
+                        {displayInfo.department && ``}
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
+
               <div className="flex items-center gap-3">
                 {/* 알림 버튼 */}
                 <button className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 hover:bg-orange-500/10 hover:text-orange-500 transition-colors">
@@ -250,15 +335,15 @@ const DeliveryTypeSelector = () => {
                     </svg>
                   </button>
                   
-                  {/* 드롭다운 메뉴 */}
+                  {/* 드롭다운 메뉴도 수정 */}
                   {showUserMenu && (
                     <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-[9999]">
                       <div className="px-4 py-2 border-b border-gray-100">
-                        <p className="text-sm font-medium text-gray-900">{user.managerName}</p>
-                        <p className="text-xs text-gray-500">{user.userId}</p>
+                        <p className="text-sm font-medium text-gray-900">{displayInfo.name}</p>
+                        <p className="text-xs text-gray-500">{userDetails?.user_id || user.userId || user.user_id}</p>
                         <p className="text-xs text-gray-500">
-                          {storeName || user.storeCode}
-                          {user.department && ` • ${user.department}부`}
+                          {displayInfo.store}
+                          {displayInfo.department && ``}
                         </p>
                       </div>
                       
@@ -272,7 +357,7 @@ const DeliveryTypeSelector = () => {
                         비밀번호 변경
                       </button>
                       
-                      {user.role === 'admin' && (
+                      {(user.role === 'admin' || userDetails?.role === 'admin') && (
                         <button
                           onClick={handleNavigateToAdmin}
                           className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -427,6 +512,7 @@ const DeliveryTypeSelector = () => {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

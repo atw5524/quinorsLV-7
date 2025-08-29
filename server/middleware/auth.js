@@ -17,6 +17,7 @@ const auth = async (req, res, next) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('🔑 JWT 디코딩 결과:', decoded);
       
       // 사용자 존재 확인
       const user = await User.findById(decoded.userId).select('-password');
@@ -36,14 +37,27 @@ const auth = async (req, res, next) => {
         });
       }
 
+      // ✅ req.user에 id 필드 추가 (profile API에서 사용)
       req.user = {
+        id: decoded.userId,           // ← 이 부분이 핵심!
         userId: decoded.userId,
         user_id: decoded.user_id,
-        role: decoded.role
+        role: decoded.role,
+        // 추가 사용자 정보도 포함
+        charge_name: user.charge_name,
+        cust_name: user.cust_name,
+        dept_name: user.dept_name,
+        department: user.department
       };
 
-      next();
+      console.log('✅ 인증 성공 - 사용자 정보:', {
+        id: req.user.id,
+        userId: req.user.userId,
+        user_id: req.user.user_id,
+        role: req.user.role
+      });
 
+      next();
     } catch (jwtError) {
       console.error('JWT 검증 오류:', jwtError);
       return res.status(401).json({

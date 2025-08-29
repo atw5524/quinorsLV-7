@@ -3,6 +3,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
+const Store = require('../models/Store');
 const rateLimit = require('express-rate-limit');
 
 const router = express.Router();
@@ -350,6 +351,37 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+router.get('/profile', auth, async (req, res) => {
+  try {
+    console.log('👤 사용자 프로필 조회 시작:', req.user.id);
+    
+    const user = await User.findById(req.user.id)
+      .select('-password')
+      .lean();
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '사용자를 찾을 수 없습니다.'
+      });
+    }
+    
+    console.log('👤 ✅ 사용자 프로필 조회 성공:', user.user_id);
+    
+    res.json({
+      success: true,
+      data: user
+    });
+    
+  } catch (error) {
+    console.error('👤 ❌ 사용자 프로필 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '프로필 조회 중 오류가 발생했습니다.'
+    });
+  }
+});
+
 // 🔍 토큰 유효성 검사
 router.get('/validate', auth, async (req, res) => {
   try {
@@ -378,6 +410,83 @@ router.get('/validate', auth, async (req, res) => {
     res.status(401).json({
       success: false,
       message: '토큰 검증에 실패했습니다.'
+    });
+  }
+});
+
+// 일반 사용자용 매장 목록 조회 (관리자 권한 불필요)
+router.get('/stores', auth, async (req, res) => {
+  try {
+    console.log('🏪 일반 사용자용 매장 목록 조회 시작');
+    console.log('🏪 요청 사용자:', req.user.userId);
+    
+    const { active = 'true', limit = 100, search } = req.query;
+    
+    let query = {};
+    
+    // 활성 매장만 조회
+    if (active === 'true') {
+      query.isActive = { $ne: false };
+    }
+    
+    // 검색 조건 추가
+    if (search && search.trim()) {
+      query.$or = [
+        { storeName: { $regex: search.trim(), $options: 'i' } },
+        { storeCode: { $regex: search.trim(), $options: 'i' } },
+        { managerName: { $regex: search.trim(), $options: 'i' } }
+      ];
+    }
+    
+    const stores = await Store.find(query)
+      .sort({ storeName: 1, department: 1 })
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log('🏪 조회된 매장 수:', stores.length);
+    
+    // 매장별로 그룹화하여 부서 정보 구성
+    const groupedStores = {};
+    stores.forEach(store => {
+      const storeName = store.storeName;
+      if (!groupedStores[storeName]) {
+        groupedStores[storeName] = {
+          _id: store._id,
+          storeName: store.storeName,
+          storeCode: store.storeCode,
+          address: store.address,
+          isActive: store.isActive,
+          createdAt: store.createdAt,
+          departments: []
+        };
+      }
+      
+      // 부서 정보 추가
+      groupedStores[storeName].departments.push({
+        department: store.department,
+        managerName: store.managerName,
+        managerPhone: store.managerPhone,
+        fullPhone: store.managerPhone ? store.managerPhone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : ''
+      });
+    });
+    
+    // 배열로 변환
+    const result = Object.values(groupedStores);
+    
+    console.log('🏪 ✅ 매장 목록 조회 성공:', result.length, '개 매장');
+    
+    res.json({
+      success: true,
+      data: result,
+      total: result.length
+    });
+    
+  } catch (error) {
+    console.error('🏪 ❌ 매장 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '매장 목록 조회 중 오류가 발생했습니다.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

@@ -48,7 +48,7 @@ const StoreManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
       console.log('🏪 매장 목록 API 호출 시작...');
       setLoading(true);
 
-      const response = await fetch('http://localhost:5480/api/admin/stores', {
+      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/stores', {
         method: 'GET',
         headers: getAuthHeaders()
       });
@@ -201,7 +201,7 @@ const StoreManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
 
     try {
       console.log('➕ 매장 정보 관리 추가 시작:', formData);
-      const response = await fetch('http://localhost:5480/api/admin/stores', {
+      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/stores', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -247,7 +247,7 @@ const StoreManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
 
     try {
       console.log('✏️ 매장 정보 관리 수정 시작:', editingStore._id, formData);
-      const response = await fetch(`http://localhost:5480/api/admin/stores/${editingStore._id}`, {
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/stores/${editingStore._id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -400,11 +400,6 @@ const StoreManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
                   <path d="M256 80c0-17.7-14.3-32-32-32s-32 14.3-32 32V224H48c-17.7 0-32 14.3-32 32s14.3 32 32 32H192V432c0 17.7 14.3 32 32 32s32-14.3 32-32V288H400c17.7 0 32-14.3 32-32s-14.3-32-32-32H256V80z"/>
                 </svg>
               </button>
-              <img
-                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg"
-                className="w-8 h-8 rounded-lg"
-                alt="Admin Avatar"
-              />
             </div>
           </div>
 

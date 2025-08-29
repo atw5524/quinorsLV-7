@@ -29,6 +29,7 @@ const corsOptions = {
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:3001',
+      'http://localhost:3002',
       'https://quinors-lv-backend.ngrok.io',
       'https://www.quinors-lv.ngrok.dev'
     ];

@@ -49,7 +49,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
       console.log('👥 승인된 회원 목록 API 호출 시작...');
       setLoading(true);
       
-      const response = await fetch('http://localhost:5480/api/admin/users', {
+      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/users', {
         method: 'GET',
         headers: getAuthHeaders()
       });
@@ -171,7 +171,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
     try {
       console.log('✏️ 회원정보 수정 시작:', editingUser._id, formData);
       
-      const response = await fetch(`http://localhost:5480/api/admin/users/${editingUser._id}`, {
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/users/${editingUser._id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -216,7 +216,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
       }
       setProcessingIds(prev => new Set([...prev, userId]));
       
-      const response = await fetch(`http://localhost:5480/api/admin/users/${userId}/status`, {
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/users/${userId}/status`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -286,7 +286,7 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
     try {
       console.log('🔑 비밀번호 초기화 시작:', userId);
       
-      const response = await fetch(`http://localhost:5480/api/admin/users/${userId}/reset-password`, {
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/users/${userId}/reset-password`, {
         method: 'POST',
         headers: getAuthHeaders()
       });
@@ -355,11 +355,11 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
   // 부서별 아이콘
   const getDepartmentIcon = (department) => {
     const icons = {
-      '여성': '👗',
-      '남성': '👔',
-      '슈즈': '👟'
+      '여성': '',
+      '남성': '',
+      '슈즈': ''
     };
-    return icons[department] || '🏪';
+    return icons[department] || '';
   };
 
   // 액션 버튼 렌더링
@@ -467,11 +467,6 @@ const UserManage = ({ onBackToAdmin, onNavigateToTab, token }) => {
                   <path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/>
                 </svg>
               </button>
-              <img
-                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg"
-                className="w-8 h-8 rounded-lg"
-                alt="Admin Avatar"
-              />
             </div>
           </div>
 

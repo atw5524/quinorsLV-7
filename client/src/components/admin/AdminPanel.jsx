@@ -60,7 +60,7 @@ const AdminPanel = () => {
     try {
       console.log('📊 통계 API 호출 시작...');
       
-      const response = await fetch('http://localhost:5480/api/admin/stats', {
+      const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/stats', {
         method: 'GET',
         headers: getAuthHeaders()
       });
@@ -95,7 +95,7 @@ const AdminPanel = () => {
       console.log('📋 신청 목록 API 호출 시작... status:', status);
       setLoading(true);
       
-      const response = await fetch(`http://localhost:5480/api/admin/requests?status=${status}`, {
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests?status=${status}`, {
         method: 'GET',
         headers: getAuthHeaders()
       });
@@ -200,7 +200,7 @@ const AdminPanel = () => {
       
       setProcessingIds(prev => new Set([...prev, requestId]));
       
-      const response = await fetch(`http://localhost:5480/api/admin/requests/${requestId}/approve`, {
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/approve`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -270,7 +270,7 @@ const AdminPanel = () => {
       
       setProcessingIds(prev => new Set([...prev, requestId]));
       
-      const response = await fetch(`http://localhost:5480/api/admin/requests/${requestId}/reject`, {
+      const response = await fetch(`https://quinors-lv-backend.ngrok.io/api/admin/requests/${requestId}/reject`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ notes }),
@@ -415,44 +415,10 @@ const AdminPanel = () => {
 
   const pendingRequests = requests.filter(req => req.status === 'pending');
 
-  // 디버깅 정보 출력
-  console.log('📊 현재 상태:', {
-    activeTab,
-    stats,
-    requestsCount: requests.length,
-    pendingCount: pendingRequests.length,
-    recentActivitiesCount: recentActivities.length,
-    todayRequests,
-    thisWeekRequests,
-    loading,
-    error
-  });
-
   // 대시보드 렌더링
   return (
     <div className="bg-gray-100 font-sans">
       <div id="mobile-container" className="w-full max-w-sm mx-auto bg-white shadow-lg min-h-screen">
-        
-        {/* 에러 표시 (개발용) */}
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded m-4">
-            <strong className="font-bold">오류: </strong>
-            <span className="block sm:inline">{error}</span>
-          </div>
-        )}
-
-        {/* 디버깅 정보 (개발용) */}
-        <div className="bg-blue-100 p-2 text-xs text-blue-800 m-4 rounded">
-          <div>📊 Stats: 총 {stats.requests.total}, 대기 {stats.requests.pending}, 승인 {stats.requests.approved}</div>
-          <div>📋 Requests: {requests.length}개, Pending: {pendingRequests.length}개</div>
-          <div>🏪 Stores: {stats.stores.totalStores}개 매장, {stats.stores.totalDepartments}개 부서</div>
-          <div>👥 Users: {stats.users.total}명, 활성 {stats.users.active}명</div>
-          <div>🔄 Recent: {recentActivities.length}개</div>
-          <div>📅 Today: {todayRequests}, Week: {thisWeekRequests}</div>
-          <div>🎯 Active Tab: {activeTab}</div>
-          {loading && <div>⏳ 로딩 중...</div>}
-        </div>
-
         {/* Header */}
         <header id="header" className="bg-gradient-to-br from-orange-400 via-orange-500 to-orange-500 text-white p-4 pt-12">
           <div className="flex items-center justify-between mb-6">
@@ -464,7 +430,7 @@ const AdminPanel = () => {
               </div>
               <div>
                 <h1 className="text-lg font-bold">관리자 대시보드</h1>
-                <p className="text-white/80 text-xs">통합 관리 시스템</p>
+                <p className="text-white/80 text-xs">루이비통 관리자님 환영합니다!</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -473,11 +439,6 @@ const AdminPanel = () => {
                   <path d="M224 0c-17.7 0-32 14.3-32 32V51.2C119 66 64 130.6 64 208v18.8c0 47-17.3 92.4-48.5 127.6l-7.4 8.3c-8.4 9.4-10.4 22.9-5.3 34.4S19.4 416 32 416H416c12.6 0 24-7.4 29.2-18.9s3.1-25-5.3-34.4l-7.4-8.3C401.3 319.2 384 273.9 384 226.8V208c0-77.4-55-142-128-156.8V32c0-17.7-14.3-32-32-32zm45.3 493.3c12-12 18.7-28.3 18.7-45.3H224 160c0 17 6.7 33.3 18.7 45.3s28.3 18.7 45.3 18.7s33.3-6.7 45.3-18.7z"/>
                 </svg>
               </button>
-              <img
-                src="https://storage.googleapis.com/uxpilot-auth.appspot.com/avatars/avatar-2.jpg"
-                className="w-8 h-8 rounded-lg"
-                alt="Admin Avatar"
-              />
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useDelivery } from '../../context/DeliveryContext';
 import { useAuth } from '../../context/AuthContext';
 import Header from '../common/Header';
@@ -9,221 +9,194 @@ import Card from '../ui/Card';
 
 const OriginStoreSelector = () => {
   const { deliveryType, originStore, dispatch, setOriginStore } = useDelivery();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
+  
   const [selectedStore, setSelectedStore] = useState(originStore);
   const [searchTerm, setSearchTerm] = useState('');
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // 부서별 담당자 선택 모달 관련 상태
-  const [showDepartmentModal, setShowDepartmentModal] = useState(false);
-  const [selectedStoreForDepartment, setSelectedStoreForDepartment] = useState(null);
+  const [forceUpdate, setForceUpdate] = useState(0);
+
+  // 기존 3단계 선택 상태 (모달에서 사용)
+  const [step, setStep] = useState(1);
+  const [selectedStoreData, setSelectedStoreData] = useState(null);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
-  const [selectedDepartmentIndex, setSelectedDepartmentIndex] = useState(null);
+  const [selectedManager, setSelectedManager] = useState(null);
+  const [departmentManagers, setDepartmentManagers] = useState([]);
+
+  // 모달 상태
+  const [showModal, setShowModal] = useState(false);
+  const [modalStep, setModalStep] = useState(1);
+
+  // 모달 내 검색 상태
+  const [modalSearchTerm, setModalSearchTerm] = useState('');
+
+  // 강제 리렌더링 함수
+  const triggerUpdate = useCallback(() => {
+    setForceUpdate(prev => prev + 1);
+  }, []);
 
   // 매장 데이터 가져오기
   useEffect(() => {
     const fetchStores = async () => {
+      if (!token) {
+        setLoading(false);
+        setError('로그인이 필요합니다');
+        setStores([]);
+        return;
+      }
+
       try {
         setLoading(true);
         setError('');
-        const response = await fetch('https://quinors-lv-backend.ngrok.io/api/admin/stores?active=true&limit=100', {
+        
+        const response = await fetch('https://quinors-lv-backend.ngrok.io/api/auth/stores?active=true&limit=100', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
         });
 
-        const result = await response.json();
-        if (response.ok && result.success) {
-          // 서버 데이터를 컴포넌트에서 사용할 형태로 변환
-          const transformedStores = result.data.map(store => ({
-            id: store._id,
-            storeCode: store.storeCode,
-            name: store.storeName,
-            address: store.address || '주소 정보 없음',
-            phone: store.fullPhone,
-            isActive: store.isActive,
-            accountIssued: store.accountIssued,
-            createdAt: store.createdAt,
-            // 부서별 담당자 정보 추가
-            departments: store.departments || [],
-            // 기존 담당자 정보 (호환성)
-            managerName: store.managerName,
-            fullPhone: store.fullPhone
-          }));
-
-          setStores(transformedStores);
-          console.log('✅ 출발지 매장 데이터 로드 완료:', transformedStores.length);
-        } else {
-          throw new Error(result.message || '매장 데이터를 불러오는데 실패했습니다.');
+        if (!response.ok) {
+          throw new Error(`API 호출 실패: ${response.status}`);
         }
-      } catch (error) {
-        console.error('❌ 출발지 매장 데이터 로드 실패:', error);
-        setError(error.message);
-        
-        // 에러 발생 시 샘플 데이터 사용
-        const sampleStores = [
-          {
-            id: 'sample-1',
-            storeCode: 'ST001',
-            name: '강남점',
-            address: '서울 강남구 압구정동 454',
-            isActive: true,
-            departments: [
-              { department: '여성', managerName: '김여성', fullPhone: '010-1111-1111' },
-              { department: '남성', managerName: '이남성', fullPhone: '010-2222-2222' }
-            ]
-          },
-          {
-            id: 'sample-2',
-            storeCode: 'ST002', 
-            name: '롯데월드타워점',
-            address: '서울 송파구 올림픽로 300',
-            isActive: true,
-            departments: [
-              { department: '여성', managerName: '박여성', fullPhone: '010-3333-3333' },
-              { department: '슈즈', managerName: '최슈즈', fullPhone: '010-4444-4444' }
-            ]
-          },
-          {
-            id: 'sample-3',
-            storeCode: 'ST003',
-            name: '현대백화점본점',
-            address: '서울 중구 남대문로 63',
-            isActive: true,
-            managerName: '김매니저',
-            fullPhone: '010-5555-5555'
+
+        const result = await response.json();
+
+        if (!result.success || !result.data || result.data.length === 0) {
+          throw new Error('매장 데이터가 없습니다');
+        }
+
+        // 서버 응답 구조에 맞게 데이터 처리
+        const finalStores = result.data.map((store) => {
+          // 부서별로 담당자 그룹화
+          const departmentGroups = {};
+          
+          if (Array.isArray(store.departments)) {
+            store.departments.forEach((dept, deptIndex) => {
+              const department = dept.department || '일반';
+              const managerName = dept.managerName || '담당자';
+              
+              if (!departmentGroups[department]) {
+                departmentGroups[department] = [];
+              }
+              
+              departmentGroups[department].push({
+                id: `${store._id}_${department}_${managerName}_${deptIndex}`,
+                managerName: managerName,
+                phone: dept.managerPhone || '',
+                fullPhone: dept.fullPhone || (dept.managerPhone ? 
+                  dept.managerPhone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : '')
+              });
+            });
           }
-        ];
-        setStores(sampleStores);
+          
+          return {
+            id: store._id,
+            storeCode: store.storeCode || '',
+            name: store.storeName || '',
+            address: store.address || '',
+            isActive: store.isActive !== false,
+            createdAt: store.createdAt,
+            departments: departmentGroups
+          };
+        });
+        
+        setStores(finalStores);
+        
+        setTimeout(() => {
+          triggerUpdate();
+        }, 100);
+        
+      } catch (error) {
+        setError(error.message);
+        setStores([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchStores();
-  }, []);
+  }, [token, triggerUpdate]);
 
-  const filteredStores = stores.filter(store => {
+  // 검색 필터링
+  const filteredStores = React.useMemo(() => {
+    if (!Array.isArray(stores) || stores.length === 0) {
+      return [];
+    }
+
+    if (!searchTerm.trim()) {
+      return stores;
+    }
+    
     const searchLower = searchTerm.toLowerCase();
-    
-    // 기본 매장 정보 검색
-    const basicMatch = 
-      store.name.toLowerCase().includes(searchLower) ||
-      store.address.toLowerCase().includes(searchLower) ||
-      store.storeCode.toLowerCase().includes(searchLower);
-    
-    // 기존 담당자 정보 검색 (호환성)
-    const legacyMatch = 
-      (store.managerName && store.managerName.toLowerCase().includes(searchLower));
-    
-    // 부서별 담당자 정보 검색
-    const departmentMatch = store.departments && store.departments.some(dept =>
-      dept.managerName.toLowerCase().includes(searchLower) ||
-      dept.department.toLowerCase().includes(searchLower)
-    );
-    
-    return basicMatch || legacyMatch || departmentMatch;
-  });
-
-  const handleStoreSelect = (store) => {
-    // 부서별 담당자가 있는 경우 모달 표시
-    if (store.departments && store.departments.length > 0) {
-      setSelectedStoreForDepartment(store);
-      setSelectedDepartment(null);
-      setSelectedDepartmentIndex(null);
-      setShowDepartmentModal(true);
-    } else {
-      // 기존 방식 (단일 담당자)
-      const storeWithoutDepartment = {
-        ...store,
-        selectedDepartment: null,
-        selectedDepartmentIndex: null,
-        selectedManager: store.managerName
-      };
+    return stores.filter(store => {
+      const matchStore = (store.name && store.name.toLowerCase().includes(searchLower)) ||
+                        (store.storeCode && store.storeCode.toLowerCase().includes(searchLower));
       
-      setSelectedStore(storeWithoutDepartment);
+      const matchManager = Object.values(store.departments || {}).some(managers =>
+        Array.isArray(managers) && managers.some(manager => 
+          manager && manager.managerName && manager.managerName.toLowerCase().includes(searchLower)
+        )
+      );
       
-      console.log('✅ 출발지 단일 담당자 매장 선택:', {
-        storeName: store.name,
-        manager: store.managerName
-      });
-    }
-  };
-
-  const handleDepartmentSelect = (department, index) => {
-    setSelectedDepartment(department);
-    setSelectedDepartmentIndex(index);
-    
-    console.log('🎯 출발지 부서 선택:', {
-      department: department.department,
-      manager: department.managerName,
-      index: index
+      return matchStore || matchManager;
     });
+  }, [stores, searchTerm, forceUpdate]);
+
+  // 모달 관련 함수들
+  const handleStoreSelect = (store) => {
+    setSelectedStoreData(store);
+    setShowModal(true);
+    setModalStep(1);
+    setSelectedDepartment(null);
+    setSelectedManager(null);
+    setModalSearchTerm('');
   };
 
-  const handleConfirmDepartmentSelection = () => {
-    if (selectedStoreForDepartment && selectedDepartment && selectedDepartmentIndex !== null) {
-      const storeWithDepartment = {
-        ...selectedStoreForDepartment,
-        selectedDepartment: selectedDepartment.department,
-        selectedDepartmentIndex: selectedDepartmentIndex,
-        selectedManager: selectedDepartment.managerName,
-        // 디버깅을 위한 추가 정보
-        _selectedDepartmentData: selectedDepartment
+  const handleModalDepartmentSelect = (department) => {
+    setSelectedDepartment(department);
+    setDepartmentManagers(selectedStoreData.departments[department] || []);
+    setModalStep(2);
+    setModalSearchTerm('');
+  };
+
+  const handleModalManagerSelect = (manager) => {
+    setSelectedManager(manager);
+  };
+
+  const handleModalConfirm = () => {
+    if (selectedManager && selectedDepartment && selectedStoreData) {
+      const finalSelection = {
+        store: selectedStoreData,
+        department: selectedDepartment,
+        manager: selectedManager,
+        displayName: `${selectedStoreData.name} ${selectedDepartment} - ${selectedManager.managerName}`
       };
       
-      setSelectedStore(storeWithDepartment);
-      setShowDepartmentModal(false);
-      setSelectedStoreForDepartment(null);
-      setSelectedDepartment(null);
-      setSelectedDepartmentIndex(null);
-      
-      console.log('✅ 출발지 부서별 매장 선택 완료:', {
-        storeName: selectedStoreForDepartment.name,
-        selectedDepartment: selectedDepartment.department,
-        selectedDepartmentIndex: selectedDepartmentIndex,
-        managerName: selectedDepartment.managerName,
-        phone: selectedDepartment.fullPhone
-      });
+      setSelectedStore(finalSelection);
+      dispatch({ type: 'SET_ORIGIN_STORE', payload: finalSelection });
+      setShowModal(false);
     }
   };
 
-  const handleCancelDepartmentSelection = () => {
-    setShowDepartmentModal(false);
-    setSelectedStoreForDepartment(null);
+  const handleModalClose = () => {
+    setShowModal(false);
+    setModalStep(1);
     setSelectedDepartment(null);
-    setSelectedDepartmentIndex(null);
+    setSelectedManager(null);
+    setModalSearchTerm('');
   };
 
-  const handleNext = () => {
-    if (selectedStore && dispatch) {
-      // DeliveryContext의 헬퍼 함수 사용 (권장)
-      if (setOriginStore) {
-        setOriginStore(
-          selectedStore, 
-          selectedStore.selectedDepartment, 
-          selectedStore.selectedDepartmentIndex
-        );
-      } else {
-        // 헬퍼 함수가 없는 경우 직접 dispatch
-        dispatch({
-          type: 'SET_ORIGIN_STORE',
-          payload: {
-            store: selectedStore,
-            selectedDepartment: selectedStore.selectedDepartment,
-            selectedDepartmentIndex: selectedStore.selectedDepartmentIndex
-          }
-        });
-      }
-      
-      console.log('🚀 출발지 설정 완료:', {
-        storeName: selectedStore.name,
-        selectedDepartment: selectedStore.selectedDepartment,
-        selectedDepartmentIndex: selectedStore.selectedDepartmentIndex
-      });
+  const handleModalBack = () => {
+    if (modalStep === 2) {
+      setModalStep(1);
+      setSelectedManager(null);
+      setModalSearchTerm('');
+    } else {
+      handleModalClose();
     }
   };
 
@@ -231,247 +204,286 @@ const OriginStoreSelector = () => {
     dispatch({ type: 'SET_STEP', payload: 1 });
   };
 
-  const handleClose = () => {
-    console.log('닫기');
+  const handleNext = () => {
+    if (selectedStore && selectedStore.manager) {
+      dispatch({ type: 'SET_ORIGIN_STORE', payload: selectedStore });
+      dispatch({ type: 'SET_STEP', payload: 3 });
+    }
   };
 
   const getPreviewContent = () => {
-    if (selectedStore) {
-      if (selectedStore.selectedDepartment) {
-        return `${deliveryType} • ${selectedStore.name} (${selectedStore.selectedDepartment}부)`;
-      }
-      return `${deliveryType} • ${selectedStore.name}`;
+    if (selectedStore && selectedStore.displayName) {
+      return `출발지: ${selectedStore.displayName}`;
     }
-    return deliveryType || '출발지 선택';
+    return '';
   };
 
-  // 매장의 담당자 정보 렌더링
-  const renderManagerInfo = (store) => {
-    if (store.departments && store.departments.length > 0) {
-      // 새로운 부서별 구조
-      return (
-        <div className="mt-2">
-          <div className="flex flex-wrap gap-1">
-            {store.departments.map((dept, index) => (
-              <span
-                key={index}
-                className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded"
-              >
-                {dept.department}부: {dept.managerName}
-              </span>
-            ))}
-          </div>
-        </div>
-      );
-    } else if (store.managerName) {
-      // 기존 구조
-      return (
-        <div className="mt-2">
-          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-            담당자: {store.managerName}
-          </span>
-        </div>
-      );
-    }
-    return null;
+  const getDepartmentColor = (department) => {
+    const colors = {
+      '여성': 'bg-pink-100 text-pink-600 border-pink-200',
+      '남성': 'bg-blue-100 text-blue-600 border-blue-200',
+      '슈즈': 'bg-green-100 text-green-600 border-green-200',
+      '일반': 'bg-gray-100 text-gray-600 border-gray-200'
+    };
+    return colors[department] || 'bg-gray-100 text-gray-600 border-gray-200';
   };
+
+  // 모달 내 담당자 검색 필터링
+  const filteredDepartmentManagers = departmentManagers.filter(manager => {
+    if (!modalSearchTerm.trim()) return true;
+    
+    return (
+      (manager && manager.managerName && manager.managerName.toLowerCase().includes(modalSearchTerm.toLowerCase())) ||
+      (manager && manager.fullPhone && manager.fullPhone.includes(modalSearchTerm)) ||
+      (manager && manager.phone && manager.phone.includes(modalSearchTerm))
+    );
+  });
 
   return (
-    <div className="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
-      <div className="w-full max-w-sm mx-auto bg-white shadow-lg rounded-3xl overflow-hidden h-screen max-h-[812px] flex flex-col relative">
-        
-        <Header 
-          title="출발지 선택"
-          subtitle="출발지 매장을 선택해주세요"
-          currentStep={2}
-          onBack={handleBack}
-          onClose={handleClose}
-        />
+    <>
+      <div className="bg-gray-100 flex items-center justify-center min-h-screen font-sans">
+        <div className="w-full max-w-sm mx-auto bg-white shadow-lg rounded-3xl overflow-hidden h-screen max-h-[812px] flex flex-col relative">
+          
+          <div className="relative z-30">
+            <Header 
+              title="출발지 선택"
+              subtitle="출발지 매장을 선택해주세요"
+              currentStep={2}
+              onBack={handleBack}
+            />
+          </div>
 
-        <main className="flex-1 bg-gray-50 p-6 space-y-4 overflow-y-auto pb-20">
-          <SearchInput 
-            value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder="매장명, 주소, 매장코드, 담당자로 검색"
-          />
+          <main className="flex-1 bg-gray-50 p-6 space-y-4 overflow-y-auto pb-20">
+            <SearchInput
+              placeholder="매장명, 매장코드, 담당자명으로 검색"
+              value={searchTerm}
+              onChange={setSearchTerm}
+            />
 
-          {/* 로딩 상태 */}
-          {loading && (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
-              <span className="ml-2 text-gray-600">매장 정보를 불러오는 중...</span>
-            </div>
-          )}
-
-          {/* 에러 상태 */}
-          {error && !loading && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <svg className="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-              <p className="text-xs text-red-600 mt-1">샘플 데이터로 진행합니다.</p>
-            </div>
-          )}
-
-          {/* 매장 목록 */}
-          <div className="flex flex-col gap-4">
-            {filteredStores.length === 0 && !loading ? (
+            {loading ? (
               <div className="text-center py-8">
-                <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                </svg>
-                <p className="text-gray-500 text-sm">검색 결과가 없습니다.</p>
-                <p className="text-gray-400 text-xs mt-1">다른 검색어를 시도해보세요.</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500 mx-auto"></div>
+                <p className="text-gray-500 mt-2">매장 정보를 불러오는 중...</p>
+              </div>
+            ) : error ? (
+              <div className="text-center py-8">
+                <p className="text-red-500 mb-2">{error}</p>
               </div>
             ) : (
-              filteredStores.map((store) => (
-                <Card
-                  key={store.id}
-                  selected={selectedStore?.id === store.id}
-                  onClick={() => handleStoreSelect(store)}
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white">
-                      <i className="fa-solid fa-store"></i>
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-bold text-gray-800">
-                          {store.name}
-                        </h3>
-                      </div>
-                      
-                      <p className="text-sm text-gray-600 mb-2">
-                        {store.address}
-                      </p>
-
-                      <div className="flex items-center justify-between mt-3">
-                        {/* 부서 개수만 표시 */}
-                        <div className="flex items-center gap-2">
-                          {store.departments && store.departments.length > 0 && (
-                            <span className="text-xs text-gray-500">
-                              {store.departments.length}개
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+              <div className="space-y-3">
+                {filteredStores.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500 mb-2">
+                      {stores.length === 0 ? '매장 데이터가 없습니다.' : '검색 결과가 없습니다.'}
+                    </p>
                   </div>
-                </Card>
-              ))
+                ) : (
+                  filteredStores.map((store, index) => (
+                    <Card
+                      key={`${store.id}-${index}`}
+                      onClick={() => handleStoreSelect(store)}
+                      className="cursor-pointer hover:border-orange-300 hover:shadow-lg transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-bold text-gray-800">{store.name}</h3>
+                          <p className="text-sm text-gray-600">{store.storeCode}</p>
+                          <p className="text-xs text-gray-500 mt-1">{store.address}</p>
+                          
+                          {/* 부서 표시 */}
+                          <div className="flex gap-1 mt-2 flex-wrap">
+                            {Object.entries(store.departments || {}).map(([dept, managers]) => (
+                              <span 
+                                key={dept}
+                                className={`px-2 py-1 text-xs rounded-full border ${getDepartmentColor(dept)}`}
+                              >
+                                {dept} ({managers.length}명)
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <i className="fa-solid fa-chevron-right text-gray-400"></i>
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </div>
             )}
-          </div>
-        </main>
+          </main>
 
-        {/* 부서별 담당자 선택 모달 */}
-        {showDepartmentModal && selectedStoreForDepartment && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60 p-4">
-            <div className="bg-white rounded-xl w-full max-w-sm p-6 max-h-[80vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-gray-900">담당자 선택</h3>
-                <button
-                  onClick={handleCancelDepartmentSelection}
-                  className="text-gray-400 hover:text-gray-600"
+          <FloatingPreview
+            content={getPreviewContent()}
+            onEdit={() => {
+              setSelectedStore(null);
+            }}
+            show={!!selectedStore}
+          />
+
+          <footer className="p-6 border-t border-gray-200 bg-white">
+            <Button 
+              onClick={handleNext} 
+              disabled={!selectedStore || loading}
+            >
+              다음 단계
+            </Button>
+          </footer>
+        </div>
+      </div>
+
+      {/* 부서/담당자 선택 모달 */}
+      {showModal && selectedStoreData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md h-[600px] flex flex-col overflow-hidden shadow-2xl">
+            
+            {/* ✅ 수정된 모달 헤더 */}
+            <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4">
+              <div className="flex items-center justify-between mb-3">
+                {/* 왼쪽: 뒤로가기 버튼 (2단계일 때만) 또는 빈 공간 */}
+                <div className="w-8 h-8">
+                  {modalStep === 2 ? (
+                    <button 
+                      onClick={handleModalBack}
+                      className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors"
+                    >
+                      <i className="fas fa-arrow-left text-white text-sm"></i>
+                    </button>
+                  ) : null}
+                </div>
+                
+                {/* 중앙: 제목 */}
+                <h2 className="text-lg font-bold">
+                  {modalStep === 1 ? '부서 선택' : '담당자 선택'}
+                </h2>
+                
+                {/* 오른쪽: X 버튼 */}
+                <button 
+                  onClick={handleModalClose}
+                  className="w-8 h-8 flex items-center justify-center hover:bg-white/20 rounded-full transition-colors"
                 >
-                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
+                  <i className="fas fa-times text-white text-sm"></i>
                 </button>
               </div>
+              
+              <p className="text-white/90 text-sm text-center">
+                {modalStep === 1 ? "부서를 선택해주세요" : "담당자를 선택해주세요"}
+              </p>
+            </div>
 
-              {/* 선택된 매장 정보 */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-400 to-orange-500 flex items-center justify-center text-white">
-                    <i className="fa-solid fa-store text-xs"></i>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-blue-900">
-                      {selectedStoreForDepartment.name}
-                    </p>
-                    <p className="text-xs text-blue-600">
-                      {selectedStoreForDepartment.storeCode}
-                    </p>
-                  </div>
+            {/* 매장 정보 표시 */}
+            <div className="bg-gray-50 p-3 border-b">
+              <h3 className="font-bold text-gray-800 text-sm">{selectedStoreData.name}</h3>
+              <p className="text-xs text-gray-600">{selectedStoreData.storeCode}</p>
+            </div>
+
+            {/* 담당자 선택 단계에서 검색 */}
+            {modalStep === 2 && (
+              <div className="p-4 border-b">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="담당자명 또는 연락처로 검색"
+                    value={modalSearchTerm}
+                    onChange={(e) => setModalSearchTerm(e.target.value)}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 pl-10 text-sm focus:outline-none focus:border-orange-500"
+                  />
+                  <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
                 </div>
               </div>
+            )}
 
-              <p className="text-sm text-gray-600 mb-4">
-                담당자를 선택해주세요:
-              </p>
-
-              {/* 부서별 담당자 목록 */}
-              <div className="space-y-3">
-                {selectedStoreForDepartment.departments.map((dept, index) => (
-                  <div
-                    key={index}
-                    className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                      selectedDepartment?.department === dept.department
-                        ? 'border-orange-500 bg-orange-50'
-                        : 'border-gray-200 hover:border-orange-300 hover:bg-orange-25'
-                    }`}
-                    onClick={() => handleDepartmentSelect(dept, index)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium text-gray-900">
-                            {dept.department}매장
-                          </span>
-                          {selectedDepartment?.department === dept.department && (
-                            <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                          )}
+            {/* 모달 내용 */}
+            <div className="flex-1 p-4 overflow-y-auto">
+              {/* 1단계: 부서 선택 */}
+              {modalStep === 1 && (
+                <div className="space-y-3">
+                  {Object.entries(selectedStoreData.departments || {}).map(([dept, managers]) => (
+                    <div
+                      key={dept}
+                      className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-orange-300 hover:shadow-lg transition-all"
+                      onClick={() => handleModalDepartmentSelect(dept)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center border ${getDepartmentColor(dept)}`}>
+                            <i className="fas fa-users text-sm"></i>
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-gray-800 text-sm">{dept} 매장</h3>
+                            <p className="text-xs text-gray-600">담당자 {managers.length}명</p>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-700">
-                          담당자: {dept.managerName}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          연락처: {dept.fullPhone}
-                        </p>
+                        <i className="fas fa-chevron-right text-gray-400"></i>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
 
-              {/* 모달 버튼 */}
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleCancelDepartmentSelection}
-                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  취소
-                </button>
-                <button
-                  onClick={handleConfirmDepartmentSelection}
-                  className="flex-1 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
-                  disabled={!selectedDepartment}
-                >
-                  선택 완료
-                </button>
-              </div>
+              {/* 2단계: 담당자 선택 */}
+              {modalStep === 2 && selectedDepartment && (
+                <>
+                  <div className="bg-gray-50 rounded-lg p-3 border mb-4">
+                    <span className={`inline-block px-2 py-1 text-xs rounded-full border ${getDepartmentColor(selectedDepartment)}`}>
+                      {selectedDepartment} 매장
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {filteredDepartmentManagers.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-gray-500 text-sm">
+                          {modalSearchTerm ? '검색 결과가 없습니다.' : '담당자가 없습니다.'}
+                        </p>
+                      </div>
+                    ) : (
+                      filteredDepartmentManagers.map((manager, index) => (
+                        <div
+                          key={manager.id || index}
+                          className={`bg-white border rounded-lg p-4 cursor-pointer transition-all ${
+                            selectedManager?.id === manager.id
+                              ? 'border-orange-500 bg-orange-50'
+                              : 'border-gray-200 hover:border-orange-300 hover:shadow-lg'
+                          }`}
+                          onClick={() => handleModalManagerSelect(manager)}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                                {manager.managerName.charAt(0)}
+                              </div>
+                              <div>
+                                <h3 className="font-bold text-gray-800 text-sm">{manager.managerName}</h3>
+                                <p className="text-xs text-gray-600">
+                                  {manager.fullPhone || '연락처 없음'}
+                                </p>
+                              </div>
+                            </div>
+                            {selectedManager?.id === manager.id && (
+                              <i className="fas fa-check text-orange-500"></i>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="p-4 border-t border-gray-200">
+              <button
+                onClick={handleModalConfirm}
+                disabled={!selectedManager}
+                className="w-full bg-gradient-to-br from-orange-500 to-orange-600 text-white font-bold py-3 rounded-xl shadow-lg hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-orange-300 transition-all duration-300 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:shadow-none"
+              >
+                {selectedManager ? '선택 완료' : '담당자를 선택해주세요'}
+              </button>
             </div>
           </div>
-        )}
-
-        <FloatingPreview 
-          content={getPreviewContent()}
-          onEdit={() => dispatch({ type: 'SET_STEP', payload: 1 })}
-          show={true}
-        />
-
-        <footer className="p-6 border-t border-gray-200 bg-white">
-          <Button onClick={handleNext} disabled={!selectedStore || loading}>
-            다음 단계
-          </Button>
-        </footer>
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 };
 

@@ -17,6 +17,10 @@ const config = {
     'http://localhost:3000',
     'http://localhost:3001', 
     'http://localhost:3003',
+    'http://localhost:3004',
+    'http://localhost:3005',
+    'http://localhost:3006',
+    'http://localhost:3007',
     'https://www.quinors-lv.ngrok.dev'
   ],
   
@@ -24,7 +28,7 @@ const config = {
   RATE_LIMIT: {
     WINDOW_MS: 15 * 60 * 1000, // 15분
     MAX_REQUESTS: 1000,
-    LOGIN_MAX: 10
+    LOGIN_MAX: 1000
   }
 };
 
