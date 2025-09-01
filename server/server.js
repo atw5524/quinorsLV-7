@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
+const ocrRoutes = require('./routes/ocr')
 
 const app = express();
 
@@ -94,7 +95,9 @@ app.get('/', (req, res) => {
       '/api/health',
       '/api/auth/register',
       '/api/auth/login',
-      '/api/admin/stats'
+      '/api/admin/stats',
+      '/api/ocr/google-vision',
+      '/api/ocr/test'
     ]
   });
 });
@@ -102,6 +105,7 @@ app.get('/', (req, res) => {
 // 라우트 설정
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/ocr', ocrRoutes);
 
 // 404 핸들러
 app.use('*', (req, res) => {
@@ -113,7 +117,9 @@ app.use('*', (req, res) => {
       'GET /api/health',
       'POST /api/auth/register',
       'POST /api/auth/login',
-      'GET /api/admin/stats'
+      'GET /api/admin/stats',
+      'POST /api/ocr/google-vision',
+      'GET /api/ocr/test'
     ]
   });
 });
