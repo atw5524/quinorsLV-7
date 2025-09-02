@@ -1,11 +1,11 @@
 // server/routes/auth.js
+
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
 const Store = require('../models/Store');
 const rateLimit = require('express-rate-limit');
-
 const router = express.Router();
 
 // 로그인 시도 제한
@@ -30,10 +30,7 @@ const registerLimiter = rateLimit({
   }
 });
 
-// 📝 회원가입
-// server/routes/auth.js (수정된 버전)
-
-// 📝 회원가입
+// 📝 회원가입 (기존 코드와 동일)
 router.post('/register', registerLimiter, async (req, res) => {
   try {
     const {
@@ -90,7 +87,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       });
     }
 
-    // 중복 아이디 검사 (아이디는 여전히 유니크해야 함)
+    // 중복 아이디 검사
     const existingUser = await User.findOne({ user_id });
     if (existingUser) {
       return res.status(409).json({
@@ -99,18 +96,7 @@ router.post('/register', registerLimiter, async (req, res) => {
       });
     }
 
-    // 🆕 중복 매장코드 검사 제거 - 같은 매장에 여러 담당자 허용
-    // 기존 코드 제거:
-    // const existingDept = await User.findOne({ dept_name });
-    // if (existingDept) {
-    //   return res.status(409).json({
-    //     success: false,
-    //     message: '이미 등록된 매장코드입니다.'
-    //   });
-    // }
-
-    // 🆕 중복 연락처 검사도 제거 (같은 매장 다른 담당자가 같은 번호 쓸 수도 있음)
-    // 하지만 필요하다면 이 부분은 유지할 수 있습니다.
+    // 중복 연락처 검사
     const existingPhone = await User.findOne({ tel_no: phoneNumber });
     if (existingPhone) {
       return res.status(409).json({
@@ -157,7 +143,6 @@ router.post('/register', registerLimiter, async (req, res) => {
       const messages = {
         user_id: '이미 사용 중인 아이디입니다.',
         tel_no: '이미 등록된 연락처입니다.'
-        // dept_name 제거 - 더 이상 중복 검사하지 않음
       };
       return res.status(409).json({
         success: false,
@@ -180,7 +165,7 @@ router.post('/register', registerLimiter, async (req, res) => {
   }
 });
 
-// 🔐 로그인
+// 🔐 로그인 - 수정됨 (tel_no 필드 추가)
 router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { user_id, password, rememberMe } = req.body;
@@ -197,6 +182,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     // 사용자 찾기 (user_id로 검색)
     const user = await User.findOne({ user_id: user_id.toLowerCase().trim() });
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -210,7 +196,6 @@ router.post('/login', loginLimiter, async (req, res) => {
         pending: '계정 승인 대기 중입니다. 관리자 승인을 기다려주세요.',
         rejected: '계정이 반려되었습니다. 관리자에게 문의하세요.'
       };
-      
       return res.status(403).json({
         success: false,
         message: statusMessages[user.status] || '계정 상태를 확인해주세요.'
@@ -219,6 +204,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     // 비밀번호 검증
     const isPasswordValid = await user.comparePassword(password);
+
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -229,7 +215,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     // JWT 토큰 생성
     const tokenExpiry = rememberMe ? '30d' : '1d';
     const token = jwt.sign(
-      { 
+      {
         userId: user._id,
         user_id: user.user_id,
         role: user.role
@@ -243,6 +229,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     await user.save();
 
     console.log('✅ 로그인 성공:', user.user_id);
+    console.log('🔍 로그인 응답에 포함될 tel_no:', user.tel_no);
 
     res.json({
       success: true,
@@ -255,8 +242,17 @@ router.post('/login', loginLimiter, async (req, res) => {
           cust_name: user.cust_name,
           dept_name: user.dept_name,
           charge_name: user.charge_name,
+          tel_no: user.tel_no, // 🎯 tel_no 필드 추가!
           role: user.role,
-          lastLoginAt: user.lastLoginAt
+          lastLoginAt: user.lastLoginAt,
+          // 추가 필드들도 포함
+          dong_name: user.dong_name,
+          dong_detail: user.dong_detail,
+          status: user.status,
+          department: user.department,
+          isActive: user.isActive,
+          createdAt: user.createdAt,
+          updatedAt: user.updated_at
         }
       }
     });
@@ -270,7 +266,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 });
 
-// 🔑 비밀번호 변경
+// 🔑 비밀번호 변경 (기존과 동일)
 router.put('/change-password', auth, async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -291,6 +287,7 @@ router.put('/change-password', auth, async (req, res) => {
     }
 
     const user = await User.findById(userId);
+
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -299,6 +296,7 @@ router.put('/change-password', auth, async (req, res) => {
     }
 
     const isCurrentPasswordValid = await user.comparePassword(currentPassword);
+
     if (!isCurrentPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -326,16 +324,19 @@ router.put('/change-password', auth, async (req, res) => {
   }
 });
 
-// 👤 내 정보 조회
+// 👤 내 정보 조회 - 수정됨 (tel_no 포함)
 router.get('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password');
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: '사용자를 찾을 수 없습니다.'
       });
     }
+
+    console.log('👤 /me 엔드포인트 - tel_no 확인:', user.tel_no);
 
     res.json({
       success: true,
@@ -351,28 +352,30 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+// 👤 프로필 조회 - 수정됨 (userId 필드 수정)
 router.get('/profile', auth, async (req, res) => {
   try {
-    console.log('👤 사용자 프로필 조회 시작:', req.user.id);
-    
-    const user = await User.findById(req.user.id)
+    console.log('👤 사용자 프로필 조회 시작:', req.user.userId); // req.user.id -> req.user.userId로 수정
+
+    const user = await User.findById(req.user.userId) // req.user.id -> req.user.userId로 수정
       .select('-password')
       .lean();
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
         message: '사용자를 찾을 수 없습니다.'
       });
     }
-    
+
     console.log('👤 ✅ 사용자 프로필 조회 성공:', user.user_id);
-    
+    console.log('👤 프로필 조회 - tel_no 확인:', user.tel_no);
+
     res.json({
       success: true,
       data: user
     });
-    
+
   } catch (error) {
     console.error('👤 ❌ 사용자 프로필 조회 실패:', error);
     res.status(500).json({
@@ -382,10 +385,45 @@ router.get('/profile', auth, async (req, res) => {
   }
 });
 
-// 🔍 토큰 유효성 검사
+// 🎯 새로 추가: 사용자 ID로 사용자 정보 조회 (FloatingPreview용)
+router.get('/stores/user/:userId', auth, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log('👤 사용자 정보 조회 시작 (userId):', userId);
+
+    const user = await User.findOne({ user_id: userId })
+      .select('-password')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '사용자를 찾을 수 없습니다.'
+      });
+    }
+
+    console.log('👤 ✅ 사용자 정보 조회 성공:', user.user_id);
+    console.log('👤 tel_no 확인:', user.tel_no);
+
+    res.json({
+      success: true,
+      data: user
+    });
+
+  } catch (error) {
+    console.error('👤 ❌ 사용자 정보 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: '사용자 정보 조회 중 오류가 발생했습니다.'
+    });
+  }
+});
+
+// 🔍 토큰 유효성 검사 (기존과 동일)
 router.get('/validate', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId).select('-password');
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -414,21 +452,21 @@ router.get('/validate', auth, async (req, res) => {
   }
 });
 
-// 일반 사용자용 매장 목록 조회 (관리자 권한 불필요)
+// 🏪 일반 사용자용 매장 목록 조회 (기존과 동일)
 router.get('/stores', auth, async (req, res) => {
   try {
     console.log('🏪 일반 사용자용 매장 목록 조회 시작');
     console.log('🏪 요청 사용자:', req.user.userId);
-    
+
     const { active = 'true', limit = 100, search } = req.query;
-    
+
     let query = {};
-    
+
     // 활성 매장만 조회
     if (active === 'true') {
       query.isActive = { $ne: false };
     }
-    
+
     // 검색 조건 추가
     if (search && search.trim()) {
       query.$or = [
@@ -437,18 +475,20 @@ router.get('/stores', auth, async (req, res) => {
         { managerName: { $regex: search.trim(), $options: 'i' } }
       ];
     }
-    
+
     const stores = await Store.find(query)
       .sort({ storeName: 1, department: 1 })
       .limit(parseInt(limit))
       .lean();
-    
+
     console.log('🏪 조회된 매장 수:', stores.length);
-    
+
     // 매장별로 그룹화하여 부서 정보 구성
     const groupedStores = {};
+
     stores.forEach(store => {
       const storeName = store.storeName;
+
       if (!groupedStores[storeName]) {
         groupedStores[storeName] = {
           _id: store._id,
@@ -460,7 +500,7 @@ router.get('/stores', auth, async (req, res) => {
           departments: []
         };
       }
-      
+
       // 부서 정보 추가
       groupedStores[storeName].departments.push({
         department: store.department,
@@ -469,18 +509,18 @@ router.get('/stores', auth, async (req, res) => {
         fullPhone: store.managerPhone ? store.managerPhone.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3') : ''
       });
     });
-    
+
     // 배열로 변환
     const result = Object.values(groupedStores);
-    
+
     console.log('🏪 ✅ 매장 목록 조회 성공:', result.length, '개 매장');
-    
+
     res.json({
       success: true,
       data: result,
       total: result.length
     });
-    
+
   } catch (error) {
     console.error('🏪 ❌ 매장 목록 조회 실패:', error);
     res.status(500).json({
