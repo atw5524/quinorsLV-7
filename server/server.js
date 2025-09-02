@@ -9,6 +9,7 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const ocrRoutes = require('./routes/ocr')
+const addressRoutes = require('./routes/address');
 
 const app = express();
 
@@ -97,7 +98,10 @@ app.get('/', (req, res) => {
       '/api/auth/login',
       '/api/admin/stats',
       '/api/ocr/google-vision',
-      '/api/ocr/test'
+      '/api/ocr/test',
+      '/api/address/convert-to-dong',
+      '/api/address/search',         
+      '/api/address/test-kakao'      
     ]
   });
 });
@@ -106,6 +110,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ocr', ocrRoutes);
+app.use('/api/address', addressRoutes);
 
 // 404 핸들러
 app.use('*', (req, res) => {
